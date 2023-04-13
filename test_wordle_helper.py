@@ -4,6 +4,8 @@
 import unittest
 import wordle_helper as wordle
 
+unittest.util._MAX_LENGTH = 999999999 # type: ignore  pylint: disable = protected-access
+
 class TestWord(unittest.TestCase):
     """Tests elements of the Word class."""
 
@@ -42,6 +44,40 @@ class TestMask(unittest.TestCase):
         )
 
         self.assertTrue(test_mask_1.is_word_accepted("ratio"))
+
+    def test_from_wordle_results(self):
+        """Test that Mask.from_wordle_results correctly creates a Mask with the given inputs."""
+
+        self.assertEqual(
+            wordle.Mask.from_wordle_results("slate", "bbyyb"),
+            wordle.Mask(
+                wanted_letters = "at",
+                unwanted_letters = "sle",
+                wanted_positions = {},
+                unwanted_positions = {3: "a", 4: "t"},
+            )
+        )
+
+        self.assertEqual(
+            wordle.Mask.from_wordle_results("chart", "gbyyg", ignore_greens = False),
+            wordle.Mask(
+                wanted_letters = "cart",
+                unwanted_letters = "h",
+                wanted_positions = {1: "c", 5: "t"},
+                unwanted_positions = {3: "a", 4: "r"},
+            )
+        )
+
+        self.assertEqual(
+            wordle.Mask.from_wordle_results("chart", "gbyyg", ignore_greens = True),
+            wordle.Mask(
+                wanted_letters = "ar",
+                unwanted_letters = "h",
+                wanted_positions = {},
+                unwanted_positions = {3: "a", 4: "r"},
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
