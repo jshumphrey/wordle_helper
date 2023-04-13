@@ -2,6 +2,7 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
+import typing
 from typing import Iterator, Optional, Sequence
 
 Letter = str
@@ -9,6 +10,24 @@ Letter = str
 THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
 ONE_POINT_LETTERS = {"m", "w", "f", "g", "y", "p", "b"}
+
+def _universal_repr(input_object) -> str:
+    try:
+        object_class = input_object.__class__
+        object_module = object_class.__module__
+        if object_module != "builtins":
+            object_fq_class = f"{object_module}.{object_class.__qualname__}"
+        else:
+            object_fq_class = object_class.__qualname__
+        object_item_names = [
+            f"{str(key)}: {str(value)}"
+            for key, value in input_object.__dict__.items()
+        ]
+
+        return f"<{object_fq_class}: {', '.join(object_item_names)}>"
+
+    except AttributeError:
+        return repr(input_object)
 
 
 class Word:
@@ -34,7 +53,10 @@ class Word:
         return self.full_word
 
     def __repr__(self) -> str:
-        return f"<Word '{self.full_word}'>"
+        return _universal_repr(self)
+
+    def __eq__(self, other: "Word") -> bool:
+        return self.full_word == other.full_word
 
     def __getitem__(self, position: int) -> Letter:
         return self.positions[position]
@@ -56,8 +78,8 @@ class Mask:
         self,
         wanted_letters: Optional[Sequence[Letter]] = None,
         unwanted_letters: Optional[Sequence[Letter]] = None,
-        wanted_positions: Optional[dict[int, str]] = None,
-        unwanted_positions: Optional[dict[int, str]] = None,
+        wanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
+        unwanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
     ) -> None:
         """Parse the input word and set up the data structures."""
 
@@ -65,16 +87,116 @@ class Mask:
         self.unwanted_letters = set(unwanted_letters) if unwanted_letters else set()
 
         if wanted_positions:
-            self.wanted_positions = {pos: set(letters) for pos, letters in wanted_positions.items()}
+            self.wanted_positions = {
+                pos: set(letters)
+                for pos, letters in wanted_positions.items()
+                if letters
+            }
             self.wanted_letters |= set().union(*self.wanted_positions.values())
         else:
             self.wanted_positions = {}
 
         if unwanted_positions:
-            self.unwanted_positions = {pos: set(letters) for pos, letters in unwanted_positions.items()}
+            self.unwanted_positions = {
+                pos: set(letters)
+                for pos, letters in unwanted_positions.items()
+                if letters
+            }
             # Do NOT add unwanted_positions to unwanted_letters, because that's not how that works
         else:
             self.unwanted_positions = {}
+
+    def __str__(self) -> str:
+        output = []
+
+        output.append(*[f"{letter} somewhere" for letter in self.wanted_letters])
+        output.append(*[f"{letter} nowhere" for letter in self.unwanted_letters])
+        output.append(*[
+            f"{letter} in position {position}"
+            for position, letter_set in self.wanted_positions.items()
+            for letter in letter_set
+        ])
+        output.append(*[
+            f"not {letter} in position {position}"
+            for position, letter_set in self.unwanted_positions.items()
+            for letter in letter_set
+        ])
+
+        return "Word must have " + " and ".join(output)
+
+    def __repr__(self) -> str:
+        return _universal_repr(self)
+
+    def __eq__(self, other: "Mask") -> bool:
+        return all([
+            self.wanted_letters == other.wanted_letters,
+            self.unwanted_letters == other.unwanted_letters,
+            self.wanted_positions == other.wanted_positions,
+            self.unwanted_positions == other.unwanted_positions,
+        ])
+
+    @classmethod
+    def from_wordle_results(
+        cls,
+        guessed_word: str,
+        wordle_results: str | Sequence[str],
+        ignore_greens: bool = False,
+    ):
+        """This allows you to create a Mask from the results of a Wordle guess.
+        `input_word` should be the string of the word you guessed.
+        `wordle_results` should be a five-char string of either "G", "Y", or "B":
+        - "G" for "green" (correct letter in correct place)
+        - "Y" for "yellow" (correct letter in incorrect place)
+        - "B" for "black (incorrect letter; does not appear in the word)
+
+        The `ignore_greens` parameter dictates whether or not green letters should be
+        ignored; if True, green letters will not be added to Mask.wanted_letters or
+        Mask.wanted_positions. You might want to do this if you'd rather gather information
+        about which letters might also be in the word, instead of trying to solve the puzzle
+        with this guess."""
+
+        guessed_word = guessed_word.lower()
+        if isinstance(wordle_results, str):
+            wordle_results = list(wordle_results)
+        wordle_results = [l.lower() for l in wordle_results]
+
+        if len(wordle_results) != 5:
+            raise ValueError("`wordle_results` must be a 5-char string or len-5 list of chars!")
+        if bad_chars := set(wordle_results) - {"g", "y", "b"}:
+            raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {bad_chars}!")
+
+        wanted_letters = []
+        unwanted_letters = []
+        wanted_positions = {i: [] for i in range(1, 6)}
+        unwanted_positions = {i: [] for i in range(1, 6)}
+
+        for index in range(1, 6):
+            guess_letter = guessed_word[index - 1]
+            result = wordle_results[index - 1]
+
+            if result == "g":
+                if ignore_greens is False:
+                    wanted_positions[index].append(guess_letter)
+                else:
+                    pass
+
+            elif result == "y":
+                wanted_letters.append(guess_letter)
+                unwanted_positions[index].append(guess_letter)
+
+            elif result == "b":
+                unwanted_letters.append(guess_letter)
+
+            else:
+                raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {result}!")
+
+        return cls(
+            wanted_letters,
+            unwanted_letters,
+            typing.cast(dict[int, Sequence[Letter]], wanted_positions),
+            typing.cast(dict[int, Sequence[Letter]], unwanted_positions),
+        )
+
 
     def is_word_accepted(self, word: Word | str) -> bool:
         """This examines an input word and determines whether
@@ -130,7 +252,7 @@ def load_words(word_list_filename: str) -> list[Word]:
     with open(word_list_filename, "r", encoding = "utf-8") as infile:
         return [Word(line.strip()) for line in infile.readlines()]
 
-def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> None:
+def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> list[str]:
     """This pretty-prints the result of applying the provided Mask to the provided
     list of words."""
     filtered_words = sorted(
@@ -138,10 +260,11 @@ def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> None:
         key = lambda w: w.score,
         reverse = True,
     )
-    print([
+
+    return [
         f"{word.full_word} ({word.score})"
         for word in filtered_words
-    ])
+    ]
 
 def main():
     """Execute top-level functionality."""
