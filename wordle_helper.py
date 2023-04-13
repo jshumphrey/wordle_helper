@@ -6,6 +6,10 @@ from typing import Iterator, Optional, Sequence
 
 Letter = str
 
+THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
+TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
+ONE_POINT_LETTERS = {"m", "w", "f", "g", "y", "p", "b"}
+
 class Word:
     """A Word represents a single valid Wordle word.
     Words also define a number of data structures to make comparison faster."""
@@ -13,6 +17,7 @@ class Word:
     full_word: str
     letters: set[Letter]
     positions: dict[int, Letter] # This dict STARTS AT 1
+    score: int
 
     def __init__(self, full_word: str) -> None:
         if len(full_word) != 5:
@@ -21,6 +26,8 @@ class Word:
         self.full_word = full_word
         self.letters = set(full_word)
         self.positions = dict(enumerate(full_word, start = 1))
+
+        self.score = calculate_word_score(self)
 
     def __str__(self) -> str:
         return self.full_word
@@ -41,23 +48,32 @@ class Mask:
 
     wanted_letters: set[Letter]
     unwanted_letters: set[Letter]
-    wanted_positions: dict[int, Letter]
+    wanted_positions: dict[int, set[Letter]]
+    unwanted_positions: dict[int, set[Letter]]
 
     def __init__(
         self,
         wanted_letters: Optional[Sequence[Letter]] = None,
         unwanted_letters: Optional[Sequence[Letter]] = None,
-        wanted_positions: Optional[dict[int, Letter]] = None,
-        unwanted_positions: Optional[dict[int, Letter]] = None,
+        wanted_positions: Optional[dict[int, str]] = None,
+        unwanted_positions: Optional[dict[int, str]] = None,
     ) -> None:
+        """Parse the input word and set up the data structures."""
+
         self.wanted_letters = set(wanted_letters) if wanted_letters else set()
         self.unwanted_letters = set(unwanted_letters) if unwanted_letters else set()
 
-        self.wanted_positions = wanted_positions if wanted_positions else {}
-        self.wanted_letters |= set(self.wanted_positions.values())
+        if wanted_positions:
+            self.wanted_positions = {pos: set(letters) for pos, letters in wanted_positions.items()}
+            self.wanted_letters |= set().union(*self.wanted_positions.values())
+        else:
+            self.wanted_positions = {}
 
-        self.unwanted_positions = unwanted_positions if unwanted_positions else {}
-        # Do NOT add unwanted_positions to unwanted_letters, because that's not how that works
+        if unwanted_positions:
+            self.unwanted_positions = {pos: set(letters) for pos, letters in unwanted_positions.items()}
+            # Do NOT add unwanted_positions to unwanted_letters, because that's not how that works
+        else:
+            self.unwanted_positions = {}
 
     def is_word_accepted(self, word: Word) -> bool:
         """This examines an input word and determines whether
@@ -87,11 +103,38 @@ class Mask:
         """This applies this Mask to an entire sequence of input Words."""
         return (word for word in words if self.is_word_accepted(word))
 
+
+def calculate_word_score(word: Word) -> int:
+    """This calculates a word's "score" from the scores of its letters.
+    This serves as a general proxy of how valuable its letters are
+    in terms of gaining new information."""
+    score = 0
+    for letter in word.letters:
+        if letter in THREE_POINT_LETTERS:
+            score += 3
+        elif letter in TWO_POINT_LETTERS:
+            score += 2
+        elif letter in ONE_POINT_LETTERS:
+            score += 1
+
+    return score
+
+
 def load_words(word_list_filename: str) -> list[Word]:
     """This reads in the list of five-letter words from the input text file,
     and returns a set of Word objects; one for each word in the file."""
     with open(word_list_filename, "r", encoding = "utf-8") as infile:
         return [Word(line.strip()) for line in infile.readlines()]
+
+def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> None:
+    """This pretty-prints the result of applying the provided Mask to the provided
+    list of words."""
+    filtered_words = sorted(
+        mask.filter_words(words),
+        key = lambda w: w.score,
+        reverse = True,
+    )
+    print([str(w) for w in filtered_words])
 
 def main():
     """Execute top-level functionality."""
