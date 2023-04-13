@@ -72,7 +72,7 @@ class TestMask(unittest.TestCase):
             wordle.Mask.from_wordle_results("chart", "gbyyg", ignore_greens = True),
             wordle.Mask(
                 wanted_letters = "ar",
-                unwanted_letters = "h",
+                unwanted_letters = "hct",
                 wanted_positions = {},
                 unwanted_positions = {3: "a", 4: "r"},
             )

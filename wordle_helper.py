@@ -11,6 +11,8 @@ THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
 ONE_POINT_LETTERS = {"m", "w", "f", "g", "y", "p", "b"}
 
+MAX_PRINT_RESULTS = 50
+
 def _universal_repr(input_object) -> str:
     try:
         object_class = input_object.__class__
@@ -69,10 +71,20 @@ class Mask:
     """A Mask represents a set of filtering criteria that gets applied
     to a set of Words."""
 
-    wanted_letters: set[Letter]
-    unwanted_letters: set[Letter]
-    wanted_positions: dict[int, set[Letter]]
-    unwanted_positions: dict[int, set[Letter]]
+    wanted_letters: set[Letter] # Letters that must appear somewhere
+    unwanted_letters: set[Letter] # Letters that must NOT appear anywhere
+    wanted_positions: dict[int, set[Letter]] # Letters that must appear in a certain position
+    unwanted_positions: dict[int, set[Letter]] # Letters that must NOT appear in a certain position
+
+    # "Ignored wanted letters" are a weird case, specifically to give Masks a way to
+    # "pass information" to one another. You might make a Wordle guess that doesn't
+    # make use of some green letters that you know are there, because you'd rather
+    # get more information about letters you don't already know about.
+    #
+    # Since this Mask might be combined with another Mask later on, we want to be able to
+    # indicate that this Mask _did_ know about these green letters, but chose not to do so.
+    # Thus, ignored_wanted_letters stores those green letters for later use.
+    ignored_wanted_letters: set[Letter]
 
     def __init__(
         self,
@@ -80,11 +92,13 @@ class Mask:
         unwanted_letters: Optional[Sequence[Letter]] = None,
         wanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
         unwanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
+        ignored_wanted_letters: Optional[Sequence[Letter]] = None,
     ) -> None:
         """Parse the input word and set up the data structures."""
 
         self.wanted_letters = set(wanted_letters) if wanted_letters else set()
         self.unwanted_letters = set(unwanted_letters) if unwanted_letters else set()
+        self.ignored_wanted_letters = set(ignored_wanted_letters) if ignored_wanted_letters else set()
 
         if wanted_positions:
             self.wanted_positions = {
@@ -178,7 +192,7 @@ class Mask:
                 if ignore_greens is False:
                     wanted_positions[index].append(guess_letter)
                 else:
-                    pass
+                    unwanted_letters.append(guess_letter)
 
             elif result == "y":
                 wanted_letters.append(guess_letter)
@@ -210,7 +224,8 @@ class Mask:
             return False
 
         # If the word has any of the letters we don't want, reject it
-        if self.unwanted_letters and self.unwanted_letters.intersection(word.letters):
+        combined_unwanted_letters = set().union(self.unwanted_letters, self.ignored_wanted_letters)
+        if combined_unwanted_letters and combined_unwanted_letters.intersection(word.letters):
             return False
 
         # If the word doesn't have any of the specific position letters we want, reject it
@@ -263,7 +278,7 @@ def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> list[str]:
 
     return [
         f"{word.full_word} ({word.score})"
-        for word in filtered_words
+        for word in filtered_words[:MAX_PRINT_RESULTS]
     ]
 
 def main():
