@@ -10,6 +10,7 @@ THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
 ONE_POINT_LETTERS = {"m", "w", "f", "g", "y", "p", "b"}
 
+
 class Word:
     """A Word represents a single valid Wordle word.
     Words also define a number of data structures to make comparison faster."""
@@ -75,9 +76,12 @@ class Mask:
         else:
             self.unwanted_positions = {}
 
-    def is_word_accepted(self, word: Word) -> bool:
+    def is_word_accepted(self, word: Word | str) -> bool:
         """This examines an input word and determines whether
         the word meets this Mask's filtering criteria."""
+
+        if isinstance(word, str):
+            word = Word(word)
 
         # If the word doesn't have any of the letters we want, reject it
         if self.wanted_letters and not self.wanted_letters.issubset(word.letters):
@@ -88,13 +92,13 @@ class Mask:
             return False
 
         # If the word doesn't have any of the specific position letters we want, reject it
-        for position, letter in self.wanted_positions.items():
-            if word[position] is not letter:
+        for position, letters in self.wanted_positions.items():
+            if word[position] not in letters:
                 return False
 
         # If the word has any of the specific position letters we don't want, reject it
-        for position, letter in self.unwanted_positions.items():
-            if word[position] is letter:
+        for position, letters in self.unwanted_positions.items():
+            if word[position] in letters:
                 return False
 
         return True
@@ -134,11 +138,17 @@ def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> None:
         key = lambda w: w.score,
         reverse = True,
     )
-    print([str(w) for w in filtered_words])
+    print([
+        f"{word.full_word} ({word.score})"
+        for word in filtered_words
+    ])
 
 def main():
     """Execute top-level functionality."""
     words = load_words("five_letter_words.txt") # pylint: disable = unused-variable
+    mask = Mask("at", "sle", {}, {3: "a", 4: "t"})
+    pprint_filter_results(mask, words)
     breakpoint() # pylint: disable = forgotten-debug-statement
 
-main()
+if __name__ == "__main__":
+    main()
