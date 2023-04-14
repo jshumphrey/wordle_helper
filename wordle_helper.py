@@ -5,7 +5,6 @@ good guesses, based on the feedback received about previous guesses."""
 from typing import Iterator, Optional, Sequence
 
 Letter = str
-LettersInput = str | list[Letter] | set[Letter] | tuple[Letter]
 
 THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
@@ -103,11 +102,11 @@ class Mask:
 
     def __init__(
         self,
-        wanted_letters: Optional[LettersInput] = None,
-        unwanted_letters: Optional[LettersInput] = None,
+        wanted_letters: Optional[set[Letter]] = None,
+        unwanted_letters: Optional[set[Letter]] = None,
         wanted_positions: Optional[dict[int, Letter]] = None,
-        unwanted_positions: Optional[dict[int, LettersInput]] = None,
-        ignored_wanted_positions: Optional[dict[int, LettersInput]] = None,
+        unwanted_positions: Optional[dict[int, set[Letter]]] = None,
+        ignored_wanted_positions: Optional[dict[int, set[Letter]]] = None,
     ) -> None:
         """Parse the input word and set up the data structures."""
 
@@ -245,10 +244,10 @@ class Mask:
         if bad_chars := set(wordle_results) - {"g", "y", "b"}:
             raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {bad_chars}!")
 
-        wanted_letters = []
-        unwanted_letters = []
+        wanted_letters = set()
+        unwanted_letters = set()
         wanted_positions: dict[int, Letter] = {}
-        unwanted_positions: dict[int, list[Letter]] = {i: [] for i in range(1, 6)}
+        unwanted_positions: dict[int, set[Letter]] = {i: set() for i in range(1, 6)}
 
         for index in range(1, 6):
             guess_letter = guessed_word[index - 1]
@@ -258,14 +257,14 @@ class Mask:
                 if ignore_greens is False:
                     wanted_positions[index] = guess_letter
                 else:
-                    unwanted_letters.append(guess_letter)
+                    unwanted_letters.add(guess_letter)
 
             elif result == "y":
-                wanted_letters.append(guess_letter)
-                unwanted_positions[index].append(guess_letter)
+                wanted_letters.add(guess_letter)
+                unwanted_positions[index].add(guess_letter)
 
             elif result == "b":
-                unwanted_letters.append(guess_letter)
+                unwanted_letters.add(guess_letter)
 
             else:
                 raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {result}!")
@@ -333,7 +332,7 @@ def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> list[str]:
 def main():
     """Execute top-level functionality."""
     words = load_words("five_letter_words.txt") # pylint: disable = unused-variable
-    mask = Mask("at", "sle", {}, {3: "a", 4: "t"})
+    mask = Mask(set("at"), set("sle"), {}, {3: {"a"}, 4: {"t"}})
     pprint_filter_results(mask, words)
     breakpoint() # pylint: disable = forgotten-debug-statement
 
