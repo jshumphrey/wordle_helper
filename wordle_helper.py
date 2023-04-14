@@ -2,10 +2,10 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
-import typing
 from typing import Iterator, Optional, Sequence
 
 Letter = str
+LettersInput = str | list[Letter] | set[Letter] | tuple[Letter]
 
 THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
@@ -49,7 +49,7 @@ class Word:
         self.letters = set(full_word)
         self.positions = dict(enumerate(full_word, start = 1))
 
-        self.score = calculate_word_score(self)
+        self.score = self.calculate_score()
 
     def __str__(self) -> str:
         return self.full_word
@@ -66,6 +66,21 @@ class Word:
     def __contains__(self, letter: Letter) -> bool:
         return letter in self.letters
 
+    def calculate_score(self) -> int:
+        """This calculates a word's "score" from the scores of its letters.
+        This serves as a general proxy of how valuable its letters are
+        in terms of gaining new information."""
+        score = 0
+        for letter in self.letters:
+            if letter in THREE_POINT_LETTERS:
+                score += 3
+            elif letter in TWO_POINT_LETTERS:
+                score += 2
+            elif letter in ONE_POINT_LETTERS:
+                score += 1
+
+        return score
+
 
 class Mask:
     """A Mask represents a set of filtering criteria that gets applied
@@ -73,7 +88,7 @@ class Mask:
 
     wanted_letters: set[Letter] # Letters that must appear somewhere
     unwanted_letters: set[Letter] # Letters that must NOT appear anywhere
-    wanted_positions: dict[int, set[Letter]] # Letters that must appear in a certain position
+    wanted_positions: dict[int, Letter] # Letters that must appear in a certain position
     unwanted_positions: dict[int, set[Letter]] # Letters that must NOT appear in a certain position
 
     # "Ignored wanted letters" are a weird case, specifically to give Masks a way to
@@ -82,31 +97,30 @@ class Mask:
     # get more information about letters you don't already know about.
     #
     # Since this Mask might be combined with another Mask later on, we want to be able to
-    # indicate that this Mask _did_ know about these green letters, but chose not to do so.
-    # Thus, ignored_wanted_letters stores those green letters for later use.
-    ignored_wanted_letters: set[Letter]
+    # indicate that this Mask _did_ know about these green letters, but chose not to use them.
+    # Thus, ignored_wanted_positions stores those green letters for later use.
+    ignored_wanted_positions: dict[int, set[Letter]]
 
     def __init__(
         self,
-        wanted_letters: Optional[Sequence[Letter]] = None,
-        unwanted_letters: Optional[Sequence[Letter]] = None,
-        wanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
-        unwanted_positions: Optional[dict[int, str | Sequence[Letter]]] = None,
-        ignored_wanted_letters: Optional[Sequence[Letter]] = None,
+        wanted_letters: Optional[LettersInput] = None,
+        unwanted_letters: Optional[LettersInput] = None,
+        wanted_positions: Optional[dict[int, Letter]] = None,
+        unwanted_positions: Optional[dict[int, LettersInput]] = None,
+        ignored_wanted_positions: Optional[dict[int, LettersInput]] = None,
     ) -> None:
         """Parse the input word and set up the data structures."""
 
         self.wanted_letters = set(wanted_letters) if wanted_letters else set()
         self.unwanted_letters = set(unwanted_letters) if unwanted_letters else set()
-        self.ignored_wanted_letters = set(ignored_wanted_letters) if ignored_wanted_letters else set()
 
         if wanted_positions:
             self.wanted_positions = {
-                pos: set(letters)
-                for pos, letters in wanted_positions.items()
-                if letters
+                pos: letter
+                for pos, letter in wanted_positions.items()
+                if letter
             }
-            self.wanted_letters |= set().union(*self.wanted_positions.values())
+            self.wanted_letters |= set(self.wanted_positions.values())
         else:
             self.wanted_positions = {}
 
@@ -119,6 +133,15 @@ class Mask:
             # Do NOT add unwanted_positions to unwanted_letters, because that's not how that works
         else:
             self.unwanted_positions = {}
+
+        if ignored_wanted_positions:
+            self.ignored_wanted_positions = {
+                pos: set(letters)
+                for pos, letters in ignored_wanted_positions.items()
+                if letters
+            }
+        else:
+            self.ignored_wanted_positions = {}
 
     def __str__(self) -> str:
         output = []
@@ -148,6 +171,49 @@ class Mask:
             self.wanted_positions == other.wanted_positions,
             self.unwanted_positions == other.unwanted_positions,
         ])
+
+    def __add__(self, other: "Mask") -> "Mask":
+        """This combines two Masks together to yield a new Mask
+        that incorporates the information from both."""
+
+        base_error_message = "These two Masks are incompatible and cannot be combined together! "
+
+        # Check to make sure that the two Masks don't require different letters in the same position
+        if conflicts := [
+            pos for pos, letter in self.wanted_positions.items()
+            if pos in other.wanted_positions
+            and other.wanted_positions[pos] != letter
+        ]:
+            raise ValueError(
+                base_error_message
+                + f"Both Masks require different letters to be in the following positions: {conflicts}"
+            )
+
+        # Check to make sure that the two Masks don't conflict on wanting / not wanting any letters
+        if conflicts := (
+            (self.wanted_letters ^ other.unwanted_letters)
+            | (self.unwanted_letters ^ other.wanted_letters)
+        ):
+            raise ValueError(
+                base_error_message
+                + f"The following letters are wanted by one Mask and unwanted by another: {conflicts}"
+            )
+
+        unwanted_positions = self.unwanted_positions
+        for pos, letters in other.unwanted_positions.items():
+            unwanted_positions[pos] = self.unwanted_positions.get(pos, set()) | letters
+
+        ignored_wanted_positions = self.ignored_wanted_positions
+        for pos, letters in other.unwanted_positions.items():
+            ignored_wanted_positions[pos] = self.ignored_wanted_positions.get(pos, set()) | letters
+
+        return Mask(
+            wanted_letters = self.wanted_letters | other.wanted_letters,
+            unwanted_letters = self.unwanted_letters | other.unwanted_letters,
+            wanted_positions = self.wanted_positions | other.wanted_positions,
+            unwanted_positions = unwanted_positions,
+            ignored_wanted_positions = ignored_wanted_positions,
+        )
 
     @classmethod
     def from_wordle_results(
@@ -181,8 +247,8 @@ class Mask:
 
         wanted_letters = []
         unwanted_letters = []
-        wanted_positions = {i: [] for i in range(1, 6)}
-        unwanted_positions = {i: [] for i in range(1, 6)}
+        wanted_positions: dict[int, Letter] = {}
+        unwanted_positions: dict[int, list[Letter]] = {i: [] for i in range(1, 6)}
 
         for index in range(1, 6):
             guess_letter = guessed_word[index - 1]
@@ -190,7 +256,7 @@ class Mask:
 
             if result == "g":
                 if ignore_greens is False:
-                    wanted_positions[index].append(guess_letter)
+                    wanted_positions[index] = guess_letter
                 else:
                     unwanted_letters.append(guess_letter)
 
@@ -207,10 +273,9 @@ class Mask:
         return cls(
             wanted_letters,
             unwanted_letters,
-            typing.cast(dict[int, Sequence[Letter]], wanted_positions),
-            typing.cast(dict[int, Sequence[Letter]], unwanted_positions),
+            wanted_positions,
+            unwanted_positions,
         )
-
 
     def is_word_accepted(self, word: Word | str) -> bool:
         """This examines an input word and determines whether
@@ -224,7 +289,7 @@ class Mask:
             return False
 
         # If the word has any of the letters we don't want, reject it
-        combined_unwanted_letters = set().union(self.unwanted_letters, self.ignored_wanted_letters)
+        combined_unwanted_letters = set().union(self.unwanted_letters, self.ignored_wanted_positions)
         if combined_unwanted_letters and combined_unwanted_letters.intersection(word.letters):
             return False
 
@@ -243,22 +308,6 @@ class Mask:
     def filter_words(self, words: Sequence[Word]) -> Iterator[Word]:
         """This applies this Mask to an entire sequence of input Words."""
         return (word for word in words if self.is_word_accepted(word))
-
-
-def calculate_word_score(word: Word) -> int:
-    """This calculates a word's "score" from the scores of its letters.
-    This serves as a general proxy of how valuable its letters are
-    in terms of gaining new information."""
-    score = 0
-    for letter in word.letters:
-        if letter in THREE_POINT_LETTERS:
-            score += 3
-        elif letter in TWO_POINT_LETTERS:
-            score += 2
-        elif letter in ONE_POINT_LETTERS:
-            score += 1
-
-    return score
 
 
 def load_words(word_list_filename: str) -> list[Word]:
