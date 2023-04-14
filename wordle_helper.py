@@ -2,10 +2,12 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
-from typing import Iterator, Optional, Sequence
+from typing import Optional
 
 Position = int
 Letter = str
+
+WORDS_FILENAME = "five_letter_words.txt"
 
 THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
 TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
@@ -171,7 +173,7 @@ class Mask:
     def from_wordle_results(
         cls,
         guessed_word: str,
-        wordle_results: str | Sequence[str],
+        wordle_results: str | list[str],
     ):
         """This allows you to create a Mask from the results of a Wordle guess.
         `input_word` should be the string of the word you guessed.
@@ -270,9 +272,9 @@ class Mask:
 
         return True
 
-    def filter_words(self, words: Sequence[Word]) -> Iterator[Word]:
+    def filter_words(self, words: list[Word]) -> list[Word]:
         """This applies this Mask to an entire sequence of input Words."""
-        return (word for word in words if self.is_word_accepted(word))
+        return [word for word in words if self.is_word_accepted(word)]
 
 
 def load_words(word_list_filename: str) -> list[Word]:
@@ -281,30 +283,71 @@ def load_words(word_list_filename: str) -> list[Word]:
     with open(word_list_filename, "r", encoding = "utf-8") as infile:
         return [Word(line.strip()) for line in infile.readlines()]
 
-def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> list[str]:
-    """This pretty-prints the result of applying the provided Mask to the provided
-    list of words."""
-    filtered_words = sorted(
-        mask.filter_words(words),
-        key = lambda w: w.score,
-        reverse = True,
-    )
 
+def apply_masks(words: list[Word], masks: list[Mask]) -> list[Word]:
+    """This applies an arbitrary number of Masks to an input list of Words."""
+    output_words = []
+    for mask in masks:
+        output_words = mask.filter_words(output_words if output_words else words)
+    return output_words
+
+
+def format_words(filtered_words: list[Word]) -> list[str]:
+    """This pretty-prints a word list; only a maximum number of the words
+    are printed, the words are sorted by their score, and the score is displayed."""
     return [
         f"{word.full_word} ({word.score})"
-        for word in filtered_words[:MAX_PRINT_RESULTS]
-    ]
+        for word in sorted(filtered_words, key = lambda w: w.score, reverse = True)
+    ][:MAX_PRINT_RESULTS]
 
-def main():
-    """Execute top-level functionality."""
-    words = load_words("five_letter_words.txt") # pylint: disable = unused-variable
-    mask = Mask(
-        correct_positions = {},
-        incorrect_positions = {3: {"a"}, 4: {"t"}},
-        incorrect_globals = set("sle"),
-    )
-    pprint_filter_results(mask, words)
-    breakpoint() # pylint: disable = forgotten-debug-statement
+
+def interactive_prompt() -> None:
+    """This provides an interactive prompt that helps to make use of this script."""
+
+    words: list[Word] = load_words(WORDS_FILENAME)
+    masks: list[Mask] = []
+
+    while True:
+        match (command := input("Enter a command: ")).lower().split():
+            # Execution-flow commands.
+            case ["quit"] | ["exit"]:
+                return
+            case ["debug"] | ["breakpoint"]:
+                breakpoint() # pylint: disable = forgotten-debug-statement
+            case ["help"]:
+                pass
+
+            # Reload the word list from the file, in case it's been changed during runtime.
+            case ["reload"]:
+                words = load_words(WORDS_FILENAME)
+                print("Word list reloaded from file.")
+
+            # Allow the user to view and/or clear the list of current Masks.
+            case ["masks"]:
+                print([str(mask) for mask in masks])
+            case ["reset"]:
+                masks = []
+                print("Mask list cleared.")
+
+            # Allow the user to add a Mask to the current list of Masks.
+            case ["add"]:
+                guess = input("Enter the word you guessed: ")
+                result = input("Enter the result of your guess: ")
+                masks.append(Mask.from_wordle_results(guess, result))
+            case ["add", guess, result]:
+                masks.append(Mask.from_wordle_results(guess, result))
+
+            case ["suggest", ("solve" | "info") as suggest_type]:
+                print(format_words(
+                    apply_masks(
+                        words,
+                        [m.info_guess_version() if suggest_type == "info" else m for m in masks]
+                    )
+                ))
+
+            case _:
+                print(f"Unknown command: {command}")
+
 
 if __name__ == "__main__":
-    main()
+    interactive_prompt()
