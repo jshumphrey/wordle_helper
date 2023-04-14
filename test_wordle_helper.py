@@ -44,7 +44,6 @@ class TestMask(unittest.TestCase):
 
     def test_from_wordle_results(self):
         """Test that Mask.from_wordle_results correctly creates a Mask with the given inputs."""
-
         self.assertEqual(
             wordle.Mask.from_wordle_results("slate", "bbyyb"),
             wordle.Mask(
@@ -60,6 +59,23 @@ class TestMask(unittest.TestCase):
                 correct_positions = {1: "c", 5: "t"},
                 incorrect_positions = {3: {"a"}, 4: {"r"}},
                 incorrect_globals = {"h"},
+            )
+        )
+
+    def test_info_guess_version(self):
+        """Test that Mask.info_guess_version returns a Mask with the correct attributes."""
+        test_mask_1 = wordle.Mask(
+            correct_positions = {1: "s", 4: "t"},
+            incorrect_positions = {5: {"e"}},
+            incorrect_globals = set("la")
+        )
+
+        self.assertEqual(
+            test_mask_1.info_guess_version(),
+            wordle.Mask(
+                correct_positions = {},
+                incorrect_positions = {1: {"e"}, 4: {"e"}, 5: {"e"}},
+                incorrect_globals = set("slat")
             )
         )
 
