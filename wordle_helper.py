@@ -4,6 +4,7 @@ good guesses, based on the feedback received about previous guesses."""
 
 from typing import Iterator, Optional, Sequence
 
+Position = int
 Letter = str
 
 THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
@@ -85,90 +86,48 @@ class Mask:
     """A Mask represents a set of filtering criteria that gets applied
     to a set of Words."""
 
-    wanted_letters: set[Letter] # Letters that must appear somewhere
-    unwanted_letters: set[Letter] # Letters that must NOT appear anywhere
-    wanted_positions: dict[int, Letter] # Letters that must appear in a certain position
-    unwanted_positions: dict[int, set[Letter]] # Letters that must NOT appear in a certain position
+    correct_positions: dict[Position, Letter] # Greens; Letters that must appear in a certain position
+    incorrect_positions: dict[Position, set[Letter]] # Yellows; Letters that must NOT appear in a certain position
+    incorrect_globals: set[Letter] # Blacks; Letters that must NOT appear anywhere
 
-    # "Ignored wanted letters" are a weird case, specifically to give Masks a way to
-    # "pass information" to one another. You might make a Wordle guess that doesn't
-    # make use of some green letters that you know are there, because you'd rather
-    # get more information about letters you don't already know about.
-    #
-    # Since this Mask might be combined with another Mask later on, we want to be able to
-    # indicate that this Mask _did_ know about these green letters, but chose not to use them.
-    # Thus, ignored_wanted_positions stores those green letters for later use.
-    ignored_wanted_positions: dict[int, set[Letter]]
+    correct_letters: set[Letter] #
 
     def __init__(
         self,
-        wanted_letters: Optional[set[Letter]] = None,
-        unwanted_letters: Optional[set[Letter]] = None,
-        wanted_positions: Optional[dict[int, Letter]] = None,
-        unwanted_positions: Optional[dict[int, set[Letter]]] = None,
-        ignored_wanted_positions: Optional[dict[int, set[Letter]]] = None,
+        correct_positions: Optional[dict[Position, Letter]] = None,
+        incorrect_positions: Optional[dict[Position, set[Letter]]] = None,
+        incorrect_globals: Optional[set[Letter]] = None,
     ) -> None:
-        """Parse the input word and set up the data structures."""
+        """Parse the inputs and set up the data structures."""
 
-        self.wanted_letters = set(wanted_letters) if wanted_letters else set()
-        self.unwanted_letters = set(unwanted_letters) if unwanted_letters else set()
+        self.correct_positions = correct_positions if correct_positions else {}
+        self.incorrect_positions = {
+            position: letters
+            for position, letters in incorrect_positions.items()
+            if letters
+        } if incorrect_positions else {}
+        self.incorrect_globals = incorrect_globals if incorrect_globals else set()
 
-        if wanted_positions:
-            self.wanted_positions = {
-                pos: letter
-                for pos, letter in wanted_positions.items()
-                if letter
-            }
-            self.wanted_letters |= set(self.wanted_positions.values())
-        else:
-            self.wanted_positions = {}
-
-        if unwanted_positions:
-            self.unwanted_positions = {
-                pos: set(letters)
-                for pos, letters in unwanted_positions.items()
-                if letters
-            }
-            # Do NOT add unwanted_positions to unwanted_letters, because that's not how that works
-        else:
-            self.unwanted_positions = {}
-
-        if ignored_wanted_positions:
-            self.ignored_wanted_positions = {
-                pos: set(letters)
-                for pos, letters in ignored_wanted_positions.items()
-                if letters
-            }
-        else:
-            self.ignored_wanted_positions = {}
+        self.correct_letters = (
+            set(self.correct_positions.values())
+            .union(*self.incorrect_positions.values())
+        )
 
     def __str__(self) -> str:
-        output = []
-
-        output.append(*[f"{letter} somewhere" for letter in self.wanted_letters])
-        output.append(*[f"{letter} nowhere" for letter in self.unwanted_letters])
-        output.append(*[
-            f"{letter} in position {position}"
-            for position, letter_set in self.wanted_positions.items()
-            for letter in letter_set
-        ])
-        output.append(*[
-            f"not {letter} in position {position}"
-            for position, letter_set in self.unwanted_positions.items()
-            for letter in letter_set
-        ])
-
-        return "Word must have " + " and ".join(output)
+        return "Word must have " + " and ".join(
+            [f"{l} in position {p}" for p, l in self.correct_positions.items()]
+            + [f"not {l} in position {p}" for p, ls in self.incorrect_positions.items() for l in ls]
+            + [f"{l} nowhere" for l in self.incorrect_globals]
+        )
 
     def __repr__(self) -> str:
         return _universal_repr(self)
 
     def __eq__(self, other: "Mask") -> bool:
         return all([
-            self.wanted_letters == other.wanted_letters,
-            self.unwanted_letters == other.unwanted_letters,
-            self.wanted_positions == other.wanted_positions,
-            self.unwanted_positions == other.unwanted_positions,
+            self.correct_positions == other.correct_positions,
+            self.incorrect_positions == other.incorrect_positions,
+            self.incorrect_globals == other.incorrect_globals,
         ])
 
     def __add__(self, other: "Mask") -> "Mask":
@@ -179,39 +138,33 @@ class Mask:
 
         # Check to make sure that the two Masks don't require different letters in the same position
         if conflicts := [
-            pos for pos, letter in self.wanted_positions.items()
-            if pos in other.wanted_positions
-            and other.wanted_positions[pos] != letter
+            pos for pos, letter in self.correct_positions.items()
+            if pos in other.correct_positions
+            and other.correct_positions[pos] != letter
         ]:
             raise ValueError(
                 base_error_message
-                + f"Both Masks require different letters to be in the following positions: {conflicts}"
+                + f"The Masks require different letters to be in the following positions: {conflicts}"
             )
 
         # Check to make sure that the two Masks don't conflict on wanting / not wanting any letters
         if conflicts := (
-            (self.wanted_letters ^ other.unwanted_letters)
-            | (self.unwanted_letters ^ other.wanted_letters)
+            (set(self.correct_positions.values()) ^ other.incorrect_globals)
+            | (set(other.correct_positions.values()) ^ self.incorrect_globals)
         ):
             raise ValueError(
                 base_error_message
                 + f"The following letters are wanted by one Mask and unwanted by another: {conflicts}"
             )
 
-        unwanted_positions = self.unwanted_positions
-        for pos, letters in other.unwanted_positions.items():
-            unwanted_positions[pos] = self.unwanted_positions.get(pos, set()) | letters
-
-        ignored_wanted_positions = self.ignored_wanted_positions
-        for pos, letters in other.unwanted_positions.items():
-            ignored_wanted_positions[pos] = self.ignored_wanted_positions.get(pos, set()) | letters
+        incorrect_positions = self.incorrect_positions
+        for pos, letters in other.incorrect_positions.items():
+            incorrect_positions[pos] = self.incorrect_positions.get(pos, set()) | letters
 
         return Mask(
-            wanted_letters = self.wanted_letters | other.wanted_letters,
-            unwanted_letters = self.unwanted_letters | other.unwanted_letters,
-            wanted_positions = self.wanted_positions | other.wanted_positions,
-            unwanted_positions = unwanted_positions,
-            ignored_wanted_positions = ignored_wanted_positions,
+            correct_positions = self.correct_positions | other.correct_positions,
+            incorrect_positions = incorrect_positions,
+            incorrect_globals = self.incorrect_globals | other.incorrect_globals,
         )
 
     @classmethod
@@ -219,7 +172,6 @@ class Mask:
         cls,
         guessed_word: str,
         wordle_results: str | Sequence[str],
-        ignore_greens: bool = False,
     ):
         """This allows you to create a Mask from the results of a Wordle guess.
         `input_word` should be the string of the word you guessed.
@@ -227,12 +179,7 @@ class Mask:
         - "G" for "green" (correct letter in correct place)
         - "Y" for "yellow" (correct letter in incorrect place)
         - "B" for "black (incorrect letter; does not appear in the word)
-
-        The `ignore_greens` parameter dictates whether or not green letters should be
-        ignored; if True, green letters will not be added to Mask.wanted_letters or
-        Mask.wanted_positions. You might want to do this if you'd rather gather information
-        about which letters might also be in the word, instead of trying to solve the puzzle
-        with this guess."""
+        """
 
         guessed_word = guessed_word.lower()
         if isinstance(wordle_results, str):
@@ -244,36 +191,56 @@ class Mask:
         if bad_chars := set(wordle_results) - {"g", "y", "b"}:
             raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {bad_chars}!")
 
-        wanted_letters = set()
-        unwanted_letters = set()
-        wanted_positions: dict[int, Letter] = {}
-        unwanted_positions: dict[int, set[Letter]] = {i: set() for i in range(1, 6)}
+        correct_positions = {}
+        incorrect_positions = {i: set() for i in range(1, 6)}
+        incorrect_globals = set()
 
         for index in range(1, 6):
             guess_letter = guessed_word[index - 1]
             result = wordle_results[index - 1]
 
             if result == "g":
-                if ignore_greens is False:
-                    wanted_positions[index] = guess_letter
-                else:
-                    unwanted_letters.add(guess_letter)
-
+                correct_positions[index] = guess_letter
             elif result == "y":
-                wanted_letters.add(guess_letter)
-                unwanted_positions[index].add(guess_letter)
-
+                incorrect_positions[index].add(guess_letter)
             elif result == "b":
-                unwanted_letters.add(guess_letter)
-
+                incorrect_globals.add(guess_letter)
             else:
-                raise ValueError(f"`wordle_results` must only contain 'G/g', 'Y/y', or 'B/b', but found {result}!")
+                raise ValueError(
+                    "`wordle_results` must only contain "
+                    f"'G/g', 'Y/y', or 'B/b', but found {result}!"
+                )
 
         return cls(
-            wanted_letters,
-            unwanted_letters,
-            wanted_positions,
-            unwanted_positions,
+            correct_positions = correct_positions,
+            incorrect_positions = incorrect_positions,
+            incorrect_globals = incorrect_globals,
+        )
+
+    def info_guess_version(self) -> "Mask":
+        """An "informational guess version" of a Mask assumes that it's being used
+        not to try to solve the Wordle, but to get as much information as possible,
+        for use in an upcoming guess.
+
+        This means that it will reverse its attitude towards the correct positions
+        (the greens): those become actively unwanted, since we already have those
+        positions understood, and instead of repeating those letters in those positions
+        in this guess, we might be able to use those positions to learn about a different
+        letter instead.
+
+        However, we also want to make sure we don't try any of our incorrect positions
+        in those positions, since we _know_ we won't find them there. So we extend the
+        incorrect positions by adding an incorrect position entry at each of the known
+        positions, with the incorrect letters being the set union of all our current
+        incorrect-position letters."""
+
+        return Mask(
+            correct_positions = {},
+            incorrect_positions = self.incorrect_positions | {
+                position: set().union(*self.incorrect_positions.values())
+                for position in self.correct_positions
+            },
+            incorrect_globals = self.incorrect_globals | set(self.correct_positions.values()),
         )
 
     def is_word_accepted(self, word: Word | str) -> bool:
@@ -283,22 +250,21 @@ class Mask:
         if isinstance(word, str):
             word = Word(word)
 
-        # If the word doesn't have any of the letters we want, reject it
-        if self.wanted_letters and not self.wanted_letters.issubset(word.letters):
+        # If the word doesn't have all of the letters we want, reject it
+        if not self.correct_letters.issubset(word.letters):
             return False
 
         # If the word has any of the letters we don't want, reject it
-        combined_unwanted_letters = set().union(self.unwanted_letters, self.ignored_wanted_positions)
-        if combined_unwanted_letters and combined_unwanted_letters.intersection(word.letters):
+        if self.incorrect_globals.intersection(word.letters):
             return False
 
         # If the word doesn't have any of the specific position letters we want, reject it
-        for position, letters in self.wanted_positions.items():
-            if word[position] not in letters:
+        for position, letter in self.correct_positions.items():
+            if word[position] != letter:
                 return False
 
         # If the word has any of the specific position letters we don't want, reject it
-        for position, letters in self.unwanted_positions.items():
+        for position, letters in self.incorrect_positions.items():
             if word[position] in letters:
                 return False
 
@@ -332,7 +298,11 @@ def pprint_filter_results(mask: Mask, words: Sequence[Word]) -> list[str]:
 def main():
     """Execute top-level functionality."""
     words = load_words("five_letter_words.txt") # pylint: disable = unused-variable
-    mask = Mask(set("at"), set("sle"), {}, {3: {"a"}, 4: {"t"}})
+    mask = Mask(
+        correct_positions = {},
+        incorrect_positions = {3: {"a"}, 4: {"t"}},
+        incorrect_globals = set("sle"),
+    )
     pprint_filter_results(mask, words)
     breakpoint() # pylint: disable = forgotten-debug-statement
 
