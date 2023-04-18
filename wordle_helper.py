@@ -111,7 +111,9 @@ class Mask:
     incorrect_positions: dict[Position, set[Letter]] # Yellows; Letters that must NOT appear in a certain position
     incorrect_globals: set[Letter] # Blacks; Letters that must NOT appear anywhere
 
-    correct_letters: set[Letter] #
+    # A set of letters that must appear somewhere in the word.
+    # This gets calculated during __init__ - it's essentially "greens plus yellows".
+    correct_letters: set[Letter]
 
     def __init__(
         self,
