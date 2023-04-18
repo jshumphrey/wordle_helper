@@ -9,7 +9,11 @@ Position = int
 Letter = str
 
 WORDS_FILENAME = "five_letter_words.txt"
-MAX_PRINT_RESULTS = 15
+MAX_PRINT_RESULTS = 15 # The default number of words to print out in the suggestion table.
+
+ # This is precompiled and stored globally because it'll be used often,
+ # and because it's the frequencies for the entire word list (i.e. it's expensive).
+ # Frequency plots for smaller lists can be calculated at runtime as needed.
 GLOBAL_LETTER_FREQUENCIES = {
     'a': 0.07852,
     'b': 0.02495,
@@ -41,6 +45,7 @@ GLOBAL_LETTER_FREQUENCIES = {
 
 
 def _universal_repr(input_object) -> str:
+    """A simple implementation of __repr__ that can be used for any type of object."""
     try:
         object_class = input_object.__class__
         object_module = object_class.__module__
@@ -365,51 +370,15 @@ def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
 def print_help() -> None:
     """This prints out some instructional text on how to use the interactive prompt."""
 
-    wrapper = textwrap.TextWrapper()
+    wrapper = textwrap.TextWrapper(
+        fix_sentence_endings = True,
+        replace_whitespace = False,
+    )
 
     print()
-    print(wrapper.fill("This script lets you get suggestions for Wordle guesses."))
-    print()
-
-    print("To get suggestions, use the 'suggest' command.")
-    print()
-    print(wrapper.fill(
-        "For suggestions that try to solve the Wordle with this guess, "
-        "use the command 'suggest solve'.  "
-        "For suggestions that try to get more information "
-        "(so you can try to solve the Wordle with a later guess), "
-        "use the command 'suggest info'."
-    ))
-    print()
-
-    print(wrapper.fill("To tell the script about words you've guessed, use the 'add' command."))
-    print()
-    print(wrapper.fill(
-        "You can either use the simple command 'add', in which case the script "
-        "will ask you for more information about what word you guessed, and "
-        "what Wordle told you about your guess, or you can use the command "
-        "'add [guessed_word] [results]' to do everything in one command. "
-    ))
-    print()
-    print(wrapper.fill(
-        "To enter information about the results of your guess, enter a five-letter 'word', "
-        "made up of the letters 'G', 'Y', or 'B' - one letter for each colored square in "
-        "the result of your guess, in the correct order.  "
-        "'G' for green, 'Y' for yellow, 'B' for black. "
-    ))
-    print()
-    print(wrapper.fill(
-        "For example, if you guessed 'SLATE' and Wordle showed you "
-        "'green, green, black, black, yellow', "
-        "you could input information about this guess by using the command 'add slate ggbby'."
-    ))
-    print()
-
-    print(wrapper.fill(
-        "If you've completed a Wordle and want to try a new one, "
-        "or if you made a mistake when adding a guess, "
-        "you can clear out the script's list of guesses with the 'reset' command."
-    ))
+    with open("README.md", "r", encoding = "utf-8") as infile:
+        for line in infile.readlines():
+            print(wrapper.fill(line))
     print()
 
 

@@ -12,7 +12,7 @@ To get suggestions, use the `suggest` command.
 
 For suggestions that try to solve the Wordle with this guess, use the command `suggest solve`. For suggestions that try to get more information (so you can try to solve the Wordle with a later guess), use the command `suggest info`.
 
-`info` suggestions ignore words that contain any "green" letters (because we already know what's in those positions)
+`info` suggestions ignore words that contain any "green" letters (because we already know what's in those positions), and attempt to find the positions for any yellow letters, while trying as many new high-valued letters as possible.
 
 ## Adding guesses
 
