@@ -2,6 +2,7 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
+import textwrap
 from typing import Callable, Optional
 
 Position = int
@@ -361,6 +362,57 @@ def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
     }
 
 
+def print_help() -> None:
+    """This prints out some instructional text on how to use the interactive prompt."""
+
+    wrapper = textwrap.TextWrapper()
+
+    print()
+    print(wrapper.fill("This script lets you get suggestions for Wordle guesses."))
+    print()
+
+    print("To get suggestions, use the 'suggest' command.")
+    print()
+    print(wrapper.fill(
+        "For suggestions that try to solve the Wordle with this guess, "
+        "use the command 'suggest solve'.  "
+        "For suggestions that try to get more information "
+        "(so you can try to solve the Wordle with a later guess), "
+        "use the command 'suggest info'."
+    ))
+    print()
+
+    print(wrapper.fill("To tell the script about words you've guessed, use the 'add' command."))
+    print()
+    print(wrapper.fill(
+        "You can either use the simple command 'add', in which case the script "
+        "will ask you for more information about what word you guessed, and "
+        "what Wordle told you about your guess, or you can use the command "
+        "'add [guessed_word] [results]' to do everything in one command. "
+    ))
+    print()
+    print(wrapper.fill(
+        "To enter information about the results of your guess, enter a five-letter 'word', "
+        "made up of the letters 'G', 'Y', or 'B' - one letter for each colored square in "
+        "the result of your guess, in the correct order.  "
+        "'G' for green, 'Y' for yellow, 'B' for black. "
+    ))
+    print()
+    print(wrapper.fill(
+        "For example, if you guessed 'SLATE' and Wordle showed you "
+        "'green, green, black, black, yellow', "
+        "you could input information about this guess by using the command 'add slate ggbby'."
+    ))
+    print()
+
+    print(wrapper.fill(
+        "If you've completed a Wordle and want to try a new one, "
+        "or if you made a mistake when adding a guess, "
+        "you can clear out the script's list of guesses with the 'reset' command."
+    ))
+    print()
+
+
 def interactive_prompt() -> None:
     """This provides an interactive prompt that helps to make use of this script."""
 
@@ -369,13 +421,17 @@ def interactive_prompt() -> None:
 
     while True:
         match (command := input("Enter a command: ")).lower().split():
-            # Execution-flow commands.
-            case ["quit"] | ["exit"] | ["quit()"]: # Exit the script
+            # Exit the script
+            case ["quit"] | ["exit"] | ["quit()"] | ["q"]:
                 return
-            case ["debug"] | ["breakpoint"]: # Drop to the debug console
+
+            # Print out some help text
+            case ["help"] | ["h"]:
+                print_help()
+
+            # Drop to the debug console
+            case ["debug"] | ["breakpoint"]:
                 breakpoint() # pylint: disable = forgotten-debug-statement
-            case ["help"]:
-                pass # Todo
 
             # Reload the word list from the file, in case it's been changed during runtime.
             case ["reload"]:
@@ -383,11 +439,11 @@ def interactive_prompt() -> None:
                 print("Word list reloaded from file.")
 
             # Allow the user to view and/or clear the list of current Masks.
-            case ["masks"]:
+            case ["masks"] | ["guesses"] | ["filters"]:
                 print([str(mask) for mask in masks])
             case ["reset"]:
                 masks = []
-                print("Mask list cleared.")
+                print("Guess list cleared.")
 
             # Allow the user to add a Mask to the current list of Masks.
             case ["add"]:
