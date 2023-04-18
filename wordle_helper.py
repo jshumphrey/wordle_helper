@@ -420,13 +420,13 @@ def interactive_prompt() -> None:
     masks: list[Mask] = []
 
     while True:
-        match (command := input("Enter a command: ")).lower().split():
+        match (command := input("Enter a command ('h' for help, 'q' to quit): ")).lower().split():
             # Exit the script
             case ["quit"] | ["exit"] | ["quit()"] | ["q"]:
                 return
 
             # Print out some help text
-            case ["help"] | ["h"]:
+            case ["help"] | ["h"] | ["?"]:
                 print_help()
 
             # Drop to the debug console
