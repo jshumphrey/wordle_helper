@@ -2,13 +2,13 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
-from typing import Optional
+from typing import Callable, Optional
 
 Position = int
 Letter = str
 
 WORDS_FILENAME = "five_letter_words.txt"
-MAX_PRINT_RESULTS = 50
+MAX_PRINT_RESULTS = 15
 GLOBAL_LETTER_FREQUENCIES = {
     'a': 0.07852,
     'b': 0.02495,
@@ -65,7 +65,7 @@ class Word:
     full_word: str
     letters: set[Letter]
     positions: dict[int, Letter] # This dict STARTS AT 1
-    score: int
+    score: float
 
     def __init__(self, full_word: str) -> None:
         if len(full_word) != 5:
@@ -92,7 +92,7 @@ class Word:
     def __contains__(self, letter: Letter) -> bool:
         return letter in self.letters
 
-    def calculate_score(self, frequency_dict: Optional[dict[Letter, float]] = None) -> int:
+    def calculate_score(self, frequency_dict: Optional[dict[Letter, float]] = None) -> float:
         """This calculates a word's "score" from the scores of its letters.
         This serves as a general proxy of how valuable its letters are
         in terms of gaining new information."""
@@ -100,7 +100,7 @@ class Word:
         if frequency_dict is None:
             frequency_dict = GLOBAL_LETTER_FREQUENCIES
 
-        return round(sum(frequency_dict[letter] for letter in self.letters) * 100, 3) # type: ignore
+        return round(sum(frequency_dict[letter] for letter in self.letters) * 100, 3)
 
 
 class Mask:
@@ -311,13 +311,32 @@ def apply_masks(words: list[Word], masks: list[Mask]) -> list[Word]:
     return output_words
 
 
-def format_words(filtered_words: list[Word]) -> list[str]:
-    """This pretty-prints a word list; only a maximum number of the words
-    are printed, the words are sorted by their score, and the score is displayed."""
-    return [
-        f"{word.full_word} ({word.score})"
-        for word in sorted(filtered_words, key = lambda w: w.score, reverse = True)
-    ][:MAX_PRINT_RESULTS]
+def sort_words(
+        filtered_words: list[Word],
+        sort_function: Optional[Callable[[Word], float]] = None,
+        reverse: bool = True,
+    ) -> list[Word]:
+    """This sorts a list of Words according to their score."""
+
+    return sorted(
+        filtered_words,
+        key = lambda w: sort_function(w) if sort_function else w.score,
+        reverse = reverse,
+    )
+
+
+def pprint_words(words: list[Word], num_words: int = MAX_PRINT_RESULTS) -> None:
+    """This pretty-prints a list of Words for display to the console.
+    The Words will be printed in the order they appear in `words`, so if they need
+    to be sorted before printing them, you'll need to do that beforehand.
+    Only a certain number of them are displayed."""
+
+    print()
+    print("\t".join(["Word", "Score"]))
+    print("\t".join(["-----", "------"]))
+    for word in words[:num_words]:
+        print("\t".join([word.full_word, str(word.score)]))
+    print()
 
 
 def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
@@ -349,12 +368,12 @@ def interactive_prompt() -> None:
     while True:
         match (command := input("Enter a command: ")).lower().split():
             # Execution-flow commands.
-            case ["quit"] | ["exit"]:
+            case ["quit"] | ["exit"] | ["quit()"]: # Exit the script
                 return
-            case ["debug"] | ["breakpoint"]:
+            case ["debug"] | ["breakpoint"]: # Drop to the debug console
                 breakpoint() # pylint: disable = forgotten-debug-statement
             case ["help"]:
-                pass
+                pass # Todo
 
             # Reload the word list from the file, in case it's been changed during runtime.
             case ["reload"]:
@@ -376,13 +395,22 @@ def interactive_prompt() -> None:
             case ["add", guess, result]:
                 masks.append(Mask.from_wordle_results(guess, result))
 
+            # Allow the user to generate suggestions based on the current list of masks.
             case ["suggest", ("solve" | "info") as suggest_type]:
-                print(format_words(
-                    apply_masks(
-                        words,
-                        [m.info_guess_version() if suggest_type == "info" else m for m in masks]
-                    )
-                ))
+                if suggest_type == "info":
+                    suggest_masks = [m.info_guess_version() for m in masks]
+                else:
+                    suggest_masks = masks
+
+                result_words = apply_masks(words, suggest_masks)
+                sorted_words = sort_words(
+                    result_words,
+                    sort_function = (
+                        lambda w: w.calculate_score(calculate_letter_frequency(result_words))
+                    ),
+                    reverse = True
+                )
+                pprint_words(sorted_words)
 
             case _:
                 print(f"Unknown command: {command}")
