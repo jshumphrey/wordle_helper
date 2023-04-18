@@ -8,12 +8,36 @@ Position = int
 Letter = str
 
 WORDS_FILENAME = "five_letter_words.txt"
-
-THREE_POINT_LETTERS = {"e", "t", "a", "o", "i", "n"}
-TWO_POINT_LETTERS = {"s", "h", "r", "d", "l", "c", "u"}
-ONE_POINT_LETTERS = {"m", "w", "f", "g", "y", "p", "b"}
-
 MAX_PRINT_RESULTS = 50
+GLOBAL_LETTER_FREQUENCIES = {
+    'a': 0.07852,
+    'b': 0.02495,
+    'c': 0.03281,
+    'd': 0.04359,
+    'e': 0.10704,
+    'f': 0.01983,
+    'g': 0.02473,
+    'h': 0.02681,
+    'i': 0.05582,
+    'j': 0.00362,
+    'k': 0.02168,
+    'l': 0.0541,
+    'm': 0.02932,
+    'n': 0.04544,
+    'o': 0.06474,
+    'p': 0.03246,
+    'q': 0.00208,
+    'r': 0.06624,
+    's': 0.10532,
+    't': 0.0541,
+    'u': 0.03793,
+    'v': 0.01113,
+    'w': 0.01762,
+    'x': 0.00464,
+    'y': 0.03074,
+    'z': 0.00477
+}
+
 
 def _universal_repr(input_object) -> str:
     try:
@@ -68,20 +92,15 @@ class Word:
     def __contains__(self, letter: Letter) -> bool:
         return letter in self.letters
 
-    def calculate_score(self) -> int:
+    def calculate_score(self, frequency_dict: Optional[dict[Letter, float]] = None) -> int:
         """This calculates a word's "score" from the scores of its letters.
         This serves as a general proxy of how valuable its letters are
         in terms of gaining new information."""
-        score = 0
-        for letter in self.letters:
-            if letter in THREE_POINT_LETTERS:
-                score += 3
-            elif letter in TWO_POINT_LETTERS:
-                score += 2
-            elif letter in ONE_POINT_LETTERS:
-                score += 1
 
-        return score
+        if frequency_dict is None:
+            frequency_dict = GLOBAL_LETTER_FREQUENCIES
+
+        return round(sum(frequency_dict[letter] for letter in self.letters) * 100, 3) # type: ignore
 
 
 class Mask:
@@ -299,6 +318,26 @@ def format_words(filtered_words: list[Word]) -> list[str]:
         f"{word.full_word} ({word.score})"
         for word in sorted(filtered_words, key = lambda w: w.score, reverse = True)
     ][:MAX_PRINT_RESULTS]
+
+
+def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
+    """This runs a frequency analysis on all of the letters in the provided word list.
+    It returns a dict that maps each letter to a percentage of that letter's
+    representation across the entire word list. All letters are included in the dict,
+    but their percentage value might be zero if the letter did not appear in the list.
+    The percentages are expressed as float values (i.e. 0.0535 = 5.35%)."""
+
+    total_num_letters = len(words) * 5 # We can cheat since we know all words have 5 letters
+    letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
+
+    for word in words:
+        for letter in word.full_word:
+            letters[letter] += 1
+
+    return {
+        letter: round(count / total_num_letters, 5)
+        for letter, count in letters.items()
+    }
 
 
 def interactive_prompt() -> None:
