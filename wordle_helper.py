@@ -319,7 +319,7 @@ def sort_words(
         sort_function: Optional[Callable[[Word], float]] = None,
         reverse: bool = True,
     ) -> list[Word]:
-    """This sorts a list of Words according to their score."""
+    """This sorts a list of Words according to their score, or a provided callable."""
 
     return sorted(
         filtered_words,
