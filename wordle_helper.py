@@ -4,6 +4,7 @@ good guesses, based on the feedback received about previous guesses."""
 
 import textwrap
 from typing import Callable, Optional
+from tqdm import tqdm
 
 Position = int
 Letter = str
@@ -380,6 +381,15 @@ def print_help() -> None:
         for line in infile.readlines():
             print(wrapper.fill(line))
     print()
+
+
+def solve_all_words(words: list[Word]) -> None:
+    """This attempts to solve all possible Wordles, based on the script's
+    suggested words. At the end, statistics are printed about the numbers of
+    guesses it took to solve each word."""
+
+    for word in words:
+        pass
 
 
 def interactive_prompt() -> None:
