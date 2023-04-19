@@ -104,6 +104,12 @@ class Word:
     def __contains__(self, letter: Letter) -> bool:
         return letter in self.letters
 
+    def __key(self):
+        return self.full_word
+
+    def __hash__(self):
+        return hash(self.__key())
+
     def calculate_score(self, frequency_dict: Optional[dict[Letter, float]] = None) -> float:
         """This calculates a word's "score" from the scores of its letters.
         This serves as a general proxy of how valuable its letters are
@@ -160,7 +166,8 @@ class Word:
 
 class Mask:
     """A Mask represents a set of filtering criteria that gets applied
-    to a set of Words."""
+    to a set of Words.
+    """
 
     correct_positions: dict[Position, Letter]  # Greens; Letters that must appear in a certain position
     incorrect_positions: dict[Position, set[Letter]]  # Yellows; Letters that must NOT appear in a certain position
@@ -170,11 +177,17 @@ class Mask:
     # This gets calculated during __init__ - it's essentially "greens plus yellows".
     correct_letters: set[Letter]
 
+    # A dict of letter: number of occurrences. For words that repeat letters,
+    # we need to be able to store information about how many times those letters
+    # are allowed to occur.
+    max_occurrences: dict[Letter, Position]
+
     def __init__(
         self,
         correct_positions: Optional[dict[Position, Letter]] = None,
         incorrect_positions: Optional[dict[Position, set[Letter]]] = None,
         incorrect_globals: Optional[set[Letter]] = None,
+        max_occurrences: Optional[dict[Letter, Position]] = None,
     ) -> None:
         """Parse the inputs and set up the data structures."""
 
@@ -185,6 +198,7 @@ class Mask:
             if letters
         } if incorrect_positions else {}
         self.incorrect_globals = incorrect_globals if incorrect_globals else set()
+        self.max_occurrences = max_occurrences if max_occurrences else {}
 
         self.correct_letters = (
             set(self.correct_positions.values())
@@ -227,12 +241,23 @@ class Mask:
 
         # Check to make sure that the two Masks don't conflict on wanting / not wanting any letters
         if conflicts := (
-            (set(self.correct_positions.values()) ^ other.incorrect_globals)
-            | (set(other.correct_positions.values()) ^ self.incorrect_globals)
+            (set(self.correct_positions.values()) & other.incorrect_globals)
+            | (set(other.correct_positions.values()) & self.incorrect_globals)
         ):
             raise ValueError(
                 base_error_message
                 + f"The following letters are wanted by one Mask and unwanted by another: {conflicts}"
+            )
+
+        # Check to make sure that the two masks don't disagree on how many times letters can occur
+        if conflicts := [
+            letter for letter, max_occurrences in self.max_occurrences.items()
+            if letter in other.max_occurrences
+            and other.max_occurrences[letter] != max_occurrences
+        ]:
+            raise ValueError(
+                base_error_message
+                + f"The Masks disagree on how many times the following letters may occur: {conflicts}"
             )
 
         incorrect_positions = self.incorrect_positions
@@ -243,7 +268,11 @@ class Mask:
             correct_positions = self.correct_positions | other.correct_positions,
             incorrect_positions = incorrect_positions,
             incorrect_globals = self.incorrect_globals | other.incorrect_globals,
+            max_occurrences = self.max_occurrences | other.max_occurrences,
         )
+
+    def __radd__(self, other: "Mask") -> "Mask":
+        return self.__add__(other)
 
     @classmethod
     def from_wordle_results(
@@ -272,6 +301,7 @@ class Mask:
         correct_positions = {}
         incorrect_positions = {i: set() for i in range(1, 6)}
         incorrect_globals = set()
+        max_occurrences = {}
 
         for index in range(1, 6):
             guess_letter = guessed_word[index - 1]
@@ -279,10 +309,36 @@ class Mask:
 
             if result == "g":
                 correct_positions[index] = guess_letter
+
             elif result == "y":
                 incorrect_positions[index].add(guess_letter)
+
+            # This one is more difficult. If the guessed word contains more than one occurrence
+            # of the letter, this "b" might be due to previous occurrences getting a "g" or "y",
+            # but the guess_word doesn't have this many occurrences of guess_letter.
+            # As a result, we need to check a couple of things before we can safely ban guess_letter.
             elif result == "b":
-                incorrect_globals.add(guess_letter)
+                # Get a list of the indices that guess_letter appears in guess_word
+                indices = [i for i, l in enumerate(guessed_word) if l == guess_letter]
+
+                # If the letter only shows up once, ban it
+                if len(indices) == 1:
+                    incorrect_globals.add(guess_letter)
+
+                # If the letter gets a "b" every time it shows up, ban it
+                elif all(wordle_results[i] == "b" for i in indices):
+                    incorrect_globals.add(guess_letter)
+
+                else:
+                    if guess_letter not in max_occurrences:
+                        max_occurrences[guess_letter] = len([
+                            i for i in indices
+                            if wordle_results[i] != "b"
+                        ])
+
+                    else: # We don't need to reprocess this letter.
+                        pass
+
             else:
                 raise ValueError(
                     "`wordle_results` must only contain "
@@ -293,6 +349,7 @@ class Mask:
             correct_positions = correct_positions,
             incorrect_positions = incorrect_positions,
             incorrect_globals = incorrect_globals,
+            max_occurrences = max_occurrences,
         )
 
     def info_guess_version(self) -> "Mask":
@@ -346,6 +403,14 @@ class Mask:
             if word[position] in letters:
                 return False
 
+        # If we have any letters that can only occur a certain number of times,
+        # and the word uses those letters more than we allow, reject it
+        for letter, max_occurrences in self.max_occurrences.items():
+            if letter not in word:
+                return False
+            if word.letter_counts[letter] > max_occurrences:
+                return False
+
         return True
 
     def filter_words(self, words: list[Word]) -> list[Word]:
@@ -362,21 +427,27 @@ def load_words(word_list_filename: str) -> list[Word]:
 
 def apply_masks(words: list[Word], masks: list[Mask]) -> list[Word]:
     """This applies an arbitrary number of Masks to an input list of Words."""
-    output_words = []
-    for mask in masks:
-        output_words = mask.filter_words(output_words if output_words else words)
-    return output_words
+    if masks == []:
+        return words
+    if len(masks) == 1:
+        return masks[0].filter_words(words)
+
+    # We have multiple masks; add them all together before filtering
+    total_mask = masks[0]
+    for mask in masks[1:]:
+        total_mask += mask
+    return total_mask.filter_words(words)
 
 
 def sort_words(
-        filtered_words: list[Word],
+        words: list[Word],
         sort_function: Optional[Callable[[Word], float]] = None,
         reverse: bool = True,
     ) -> list[Word]:
     """This sorts a list of Words according to their score, or a provided callable."""
 
     return sorted(
-        filtered_words,
+        words,
         key = lambda w: sort_function(w) if sort_function else w.score,
         reverse = reverse,
     )
@@ -389,6 +460,8 @@ def pprint_words(words: list[Word], num_words: int = MAX_PRINT_RESULTS) -> None:
     Only a certain number of them are displayed."""
 
     print()
+    print(f"Found {len(words)} total words.")
+    print(f"Here are the top {num_words} of them.")
     print("\t".join(["Word", "Score"]))
     print("\t".join(["-----", "------"]))
     for word in words[:num_words]:
@@ -431,13 +504,114 @@ def print_help() -> None:
     print()
 
 
-def solve_all_words(words: list[Word]) -> None:
+def solve_wordle(
+    target_word: Word | str,
+    all_words: list[Word],
+    starting_word: Optional[Word] = None,
+    print_output: bool = False,
+) -> int:
+    """This attempts to solve the Wordle whose target is target_word, based on
+    the provided list of possible words. It returns the number of guesses it took
+    to solve the Wordle.
+
+    The goal for the solver is to maximise the amount of 3-guess solves, since
+    1-guess and 2-guess solves are mostly a result of blind luck. As a result,
+    the first two guesses are "informational" guesses (see Mask.info_guess_version),
+    and guesses from the third guess onward are "solve" guesses.
+
+    If desired, an alternative initial guess can be provided with the
+    `starting_word` parameter."""
+
+    def calculate_best_word(words: list[Word]) -> Word:
+        """This function encapsulates a special case of using sort_words.
+        We want to sort by the score of each word, recalculated with
+        the word list provided, and we want only the single best word."""
+
+        letter_frequency = calculate_letter_frequency(words)
+        return sort_words(
+            words,
+            sort_function = lambda w: w.calculate_score(letter_frequency),
+            reverse = True
+        )[0]
+
+    if isinstance(target_word, str):
+        target_word = Word(target_word)
+
+    num_guesses = 0
+    masks = []
+
+    guess_word = starting_word if starting_word else sort_words(all_words)[0]
+
+    while True:
+        num_guesses += 1
+
+        # See if we've correctly guessed the word
+        if guess_word == target_word:
+            if print_output:
+                print(f"Guess #{num_guesses}: Guessed '{guess_word}' and solved the Wordle!")
+            return num_guesses
+
+        # If we're wrong, identify the new guess word and go again.
+        guess_results = target_word.calculate_guess_results(guess_word)
+        masks.append(Mask.from_wordle_results(guess_word.full_word, guess_results))
+
+        info_words = apply_masks(all_words, [m.info_guess_version() for m in masks])
+        solve_words = apply_masks(all_words, masks)
+        if print_output:
+            print(
+                f"Guess #{num_guesses}: Guessed '{guess_word}' and got '{guess_results}'; "
+                f"{len(solve_words)} words left"
+            )
+
+        # Check to make sure we're not in an "impossible situation"; raise if so.
+        if solve_words == [] or (len(solve_words) == 1 and solve_words != [target_word]):
+            raise RuntimeError(
+                f"Stuck in impossible situation when trying to solve the word '{target_word}'! "
+                f"Current masks: {[str(m) for m in masks]}; "
+                f"current possible words: {[str(w) for w in solve_words]}"
+            )
+
+        if len(solve_words) >= 20 and len(info_words) >= 10:
+            guess_word = calculate_best_word(info_words)
+        else:
+            guess_word = calculate_best_word(solve_words)
+
+
+def solve_all_wordles(words: list[Word]) -> None:
     """This attempts to solve all possible Wordles, based on the script's
     suggested words. At the end, statistics are printed about the numbers of
     guesses it took to solve each word."""
 
-    for word in words:
-        pass
+    results: dict[Word, int] = {}  # Stores the number of guesses it took to solve the Word
+
+    for word in tqdm(words, desc = "Playing all Wordles"):
+        results[word] = solve_wordle(target_word = word, all_words = words)
+
+    solve_counts = {n: 0 for n in range(1, 8)}
+    max_guesses = 0
+    max_guess_words = []
+
+    for word, guesses in results.items():
+        if guesses > max_guesses:
+            max_guesses = guesses
+            max_guess_words = [word]
+        elif guesses == max_guesses:
+            max_guess_words.append(word)
+        solve_counts[min(guesses, 7)] += 1
+
+    print()
+    print("Successfully solved all Wordles.")
+    for n in range(1, 8):  # pylint: disable = invalid-name
+        percent = round((solve_counts[n] / len(words)) * 100, 2)
+        pprint_n = str(n) if n < 7 else "more than 6"
+        print(f"Words solved in {pprint_n} guesses: {solve_counts[n]} ({percent}%)")
+    print()
+    print(f"Highest number of guesses to solve: {max_guesses}")
+    print(
+        f"Words that took {max_guesses} guesses to solve: "
+        + ", ".join([str(w) for w in max_guess_words[:5]])
+    )
+    print()
 
 
 def interactive_prompt() -> None:
@@ -488,14 +662,26 @@ def interactive_prompt() -> None:
                     suggest_masks = masks
 
                 result_words = apply_masks(words, suggest_masks)
-                sorted_words = sort_words(
-                    result_words,
-                    sort_function = (
-                        lambda w: w.calculate_score(calculate_letter_frequency(result_words))
-                    ),
-                    reverse = True
-                )
-                pprint_words(sorted_words)
+                if result_words == []:
+                    if suggest_type == "info":
+                        print("No result words found! You might want to try 'suggest solve' instead.")
+                    else:
+                        print("No result words found! Make sure you entered everything correctly.")
+
+                else:
+                    letter_frequency = calculate_letter_frequency(result_words)
+                    sorted_words = sort_words(
+                        result_words,
+                        sort_function = lambda w: w.calculate_score(letter_frequency),
+                        reverse = True
+                    )
+                    pprint_words(sorted_words)
+
+            # Allow the user to tell the script to try to automatically solve Wordles.
+            case ["autosolve", "all"]:
+                solve_all_wordles(words)
+            case ["autosolve", word]:
+                solve_wordle(Word(word), words, print_output = True)
 
             case _:
                 print(f"Unknown command: {command}")

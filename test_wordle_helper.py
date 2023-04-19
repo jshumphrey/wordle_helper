@@ -62,6 +62,14 @@ class TestMask(unittest.TestCase):
 
         self.assertTrue(test_mask_1.is_word_accepted("ratio"))
 
+    def test_is_word_accepted_dupes(self):
+        """Test that Mask.is_word_accepted correctly accepts and rejects words
+        when the guessed word contains duplicate letters."""
+
+        # This Mask simulates guessing the word "arose" against a target of "adobo"
+        test_mask_1 = wordle.Mask.from_wordle_results("arose", "gbgbb")
+        self.assertTrue(test_mask_1.is_word_accepted("adobo"))
+
     def test_from_wordle_results(self):
         """Test that Mask.from_wordle_results correctly creates a Mask with the given inputs."""
         self.assertEqual(
@@ -79,6 +87,32 @@ class TestMask(unittest.TestCase):
                 correct_positions = {1: "c", 5: "t"},
                 incorrect_positions = {3: {"a"}, 4: {"r"}},
                 incorrect_globals = {"h"},
+            )
+        )
+
+    def test_from_wordle_results_dupes(self):
+        """Test that mask.from_wordle_results correctly cretaes a Mask with the given inputs
+        when the guessed word contains duplicate letters."""
+
+        # This Mask simulates guessing the word "aloha" against a target of "adobo"
+        self.assertEqual(
+            wordle.Mask.from_wordle_results("aloha", "gbgbb"),
+            wordle.Mask(
+                correct_positions = {1: "a", 3: "o"},
+                incorrect_positions = {},
+                incorrect_globals = set("lh"),
+                max_occurrences = {"a": 1},
+            )
+        )
+
+        # This Mask simulates guessing the word "babes" against a target of "bases"
+        self.assertEqual(
+            wordle.Mask.from_wordle_results("babes", "ggbgg"),
+            wordle.Mask(
+                correct_positions = {1: "b", 2: "a", 4: "e", 5: "s"},
+                incorrect_positions = {},
+                incorrect_globals = set(),
+                max_occurrences = {"b": 1},
             )
         )
 
