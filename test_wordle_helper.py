@@ -16,7 +16,27 @@ class TestWord(unittest.TestCase):
         self.assertEqual(test_word_1.full_word, "slate")
         self.assertEqual(test_word_1.letters, set(["s", "l", "a", "t", "e"]))
         self.assertEqual(test_word_1.positions, {1: "s", 2: "l", 3: "a", 4: "t", 5: "e"})
-        self.assertEqual(test_word_1.score, 13)
+        self.assertEqual(test_word_1.letter_counts, {"s": 1, "l": 1, "a": 1, "t": 1, "e": 1})
+
+        test_word_2 = wordle.Word("teeth")
+        self.assertEqual(test_word_2.letter_counts, {"t": 2, "e": 2, "h": 1})
+
+    def test_calculate_guess_results_normal(self):
+        """Test that Word.calculate_guess_results correctly calculates Wordle guess results
+        when the input word and guessed words don't have any duplicate letters."""
+        test_word_1 = wordle.Word("slate")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("ratio")), "byybb")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("slide")), "ggbbg")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("slate")), "ggggg")
+
+    def test_calculate_guess_results_dupes(self):
+        """Test that Word.calculate_guess_results correctly calculates Wordle guess results
+        when the input word or guessed words do have duplicate letters."""
+        test_word_1 = wordle.Word("teeth")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("table")), "gbbby")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("genie")), "bgbby")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("teens")), "gggbb")
+        self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("epees")), "ybgbb")
 
 class TestMask(unittest.TestCase):
     """Tests elements of the Mask class."""

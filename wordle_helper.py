@@ -2,19 +2,19 @@
 """This is a simple script to help output valid Wordle words that might make
 good guesses, based on the feedback received about previous guesses."""
 
-import textwrap
-from typing import Callable, Optional
-from tqdm import tqdm
+import textwrap  # Used to pretty-print long blocks of text so that they appear nicely
+from typing import Callable, Optional  # Used for type-checking throughout the script
+from tqdm import tqdm  # Used to display progress bars for long-running operations
 
 Position = int
 Letter = str
 
 WORDS_FILENAME = "five_letter_words.txt"
-MAX_PRINT_RESULTS = 15 # The default number of words to print out in the suggestion table.
+MAX_PRINT_RESULTS = 15  # The default number of words to print out in the suggestion table.
 
- # This is precompiled and stored globally because it'll be used often,
- # and because it's the frequencies for the entire word list (i.e. it's expensive).
- # Frequency plots for smaller lists can be calculated at runtime as needed.
+# This is precompiled and stored globally because it'll be used often,
+# and because it's the frequencies for the entire word list (i.e. it's expensive).
+# Frequency plots for smaller lists can be calculated at runtime as needed.
 GLOBAL_LETTER_FREQUENCIES = {
     'a': 0.07852,
     'b': 0.02495,
@@ -71,7 +71,10 @@ class Word:
 
     full_word: str
     letters: set[Letter]
-    positions: dict[int, Letter] # This dict STARTS AT 1
+
+    positions: dict[int, Letter]  # Position indices START AT 1
+    letter_counts: dict[Letter, int]  # Dict of {letter: count of occurrences}
+
     score: float
 
     def __init__(self, full_word: str) -> None:
@@ -80,7 +83,9 @@ class Word:
 
         self.full_word = full_word
         self.letters = set(full_word)
+
         self.positions = dict(enumerate(full_word, start = 1))
+        self.letter_counts = {letter: self.full_word.count(letter) for letter in self.letters}
 
         self.score = self.calculate_score()
 
@@ -109,14 +114,57 @@ class Word:
 
         return round(sum(frequency_dict[letter] for letter in self.letters) * 100, 3)
 
+    def calculate_guess_results(self, guessed_word: "Word") -> str:
+        """This takes in a guessed word and returns the Wordle results string.
+        In other words, this pretends that this Word is being used as the target
+        word in a Wordle game, and the guessed word is an attempt to solve the Wordle.
+
+        With that in mind, this function returns the "guess results" string in the same
+        format as used in interactive_prompt or in Mask.from_wordle_results - a five-char
+        string composed of "g", "y", or "b", one for each letter in the guessed word.
+
+        One quirk about Wordle results involves words with multiple instances of the same letter.
+
+        If the target word is "teeth", and the user guesses "genie", the results will be "bgbby".
+        Note that the second "e" in "genie" gets a "y": even though it's in the wrong place,
+        there _is_ a second "e" in the word that needs to be guessed, so it doesn't get a "b".
+
+        On the other hand, if the guess was "epees", the results would be "ybgbb".
+        There is no _third_ "e" in the target word, so that third "e" gets a "b".
+
+        To handle this, the `used_counts` dict keeps track of how many times we've processed
+        each letter in the guessed word, so that we can start assigning "b"s once we've
+        "used up" the occurrences of that letter in the target word."""
+
+        used_counts = {}
+        results = ""
+
+        for position, letter in guessed_word.positions.items():
+            if letter in self:
+                if self[position] == letter:  # Match at this position
+                    results += "g"
+
+                else:  # Letter is in the word, but the position is wrong
+                    if used_counts.get(letter, 0) < self.letter_counts[letter]:
+                        results += "y"  # There's still occurrences left, so assign "y"
+                    else:
+                        results += "b"  # We've used up all the occurrences, so assign "b"
+
+                used_counts[letter] = used_counts.get(letter, 0) + 1
+
+            else:  # Letter not in this word at all
+                results += "b"
+
+        return results
+
 
 class Mask:
     """A Mask represents a set of filtering criteria that gets applied
     to a set of Words."""
 
-    correct_positions: dict[Position, Letter] # Greens; Letters that must appear in a certain position
-    incorrect_positions: dict[Position, set[Letter]] # Yellows; Letters that must NOT appear in a certain position
-    incorrect_globals: set[Letter] # Blacks; Letters that must NOT appear anywhere
+    correct_positions: dict[Position, Letter]  # Greens; Letters that must appear in a certain position
+    incorrect_positions: dict[Position, set[Letter]]  # Yellows; Letters that must NOT appear in a certain position
+    incorrect_globals: set[Letter]  # Blacks; Letters that must NOT appear anywhere
 
     # A set of letters that must appear somewhere in the word.
     # This gets calculated during __init__ - it's essentially "greens plus yellows".
@@ -355,7 +403,7 @@ def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
     but their percentage value might be zero if the letter did not appear in the list.
     The percentages are expressed as float values (i.e. 0.0535 = 5.35%)."""
 
-    total_num_letters = len(words) * 5 # We can cheat since we know all words have 5 letters
+    total_num_letters = len(words) * 5  # We can cheat since we know all words have 5 letters
     letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
 
     for word in words:
@@ -410,7 +458,7 @@ def interactive_prompt() -> None:
 
             # Drop to the debug console
             case ["debug"] | ["breakpoint"]:
-                breakpoint() # pylint: disable = forgotten-debug-statement
+                breakpoint()  # pylint: disable = forgotten-debug-statement
 
             # Reload the word list from the file, in case it's been changed during runtime.
             case ["reload"]:
