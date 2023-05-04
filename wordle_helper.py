@@ -17,10 +17,10 @@ MAX_PRINT_RESULTS = 15  # The default number of words to print out in the sugges
 # Frequency plots for smaller lists can be calculated at runtime as needed.
 GLOBAL_LETTER_FREQUENCIES = {
     'a': 0.07852, 'b': 0.02495, 'c': 0.03281, 'd': 0.04359, 'e': 0.10704, 'f': 0.01983,
-    'g': 0.02473, 'h': 0.02681, 'i': 0.05582, 'j': 0.00362, 'k': 0.02168, 'l': 0.0541,
+    'g': 0.02473, 'h': 0.02681, 'i': 0.05582, 'j': 0.00362, 'k': 0.02168, 'l': 0.05410,
     'm': 0.02932, 'n': 0.04544, 'o': 0.06474, 'p': 0.03246, 'q': 0.00208, 'r': 0.06624,
-    's': 0.10532, 't': 0.0541, 'u': 0.03793, 'v': 0.01113, 'w': 0.01762, 'x': 0.00464,
-    'y': 0.03074, 'z': 0.00477
+    's': 0.10532, 't': 0.05410, 'u': 0.03793, 'v': 0.01113, 'w': 0.01762, 'x': 0.00464,
+    'y': 0.03074, 'z': 0.00477,
 }
 
 # This is a set of words that end in "-es" but are still valid words.
@@ -372,8 +372,7 @@ class Mask:
         """This examines an input word and determines whether
         the word meets this Mask's filtering criteria."""
 
-        if isinstance(word, str):
-            word = Word(word)
+        word = word if isinstance(word, Word) else Word(word)
 
         # If the word doesn't have all of the letters we want, reject it
         if not self.correct_letters.issubset(word.letters):
