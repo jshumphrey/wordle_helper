@@ -3966,8 +3966,6 @@ twins
 twirl
 twist
 twits
-twixt
-tyees
 tyers
 tying
 typed
@@ -4244,7 +4242,6 @@ wired
 wires
 wised
 wiser
-wises
 wisps
 wispy
 witch
