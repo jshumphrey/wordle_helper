@@ -16,32 +16,22 @@ MAX_PRINT_RESULTS = 15  # The default number of words to print out in the sugges
 # and because it's the frequencies for the entire word list (i.e. it's expensive).
 # Frequency plots for smaller lists can be calculated at runtime as needed.
 GLOBAL_LETTER_FREQUENCIES = {
-    'a': 0.07852,
-    'b': 0.02495,
-    'c': 0.03281,
-    'd': 0.04359,
-    'e': 0.10704,
-    'f': 0.01983,
-    'g': 0.02473,
-    'h': 0.02681,
-    'i': 0.05582,
-    'j': 0.00362,
-    'k': 0.02168,
-    'l': 0.0541,
-    'm': 0.02932,
-    'n': 0.04544,
-    'o': 0.06474,
-    'p': 0.03246,
-    'q': 0.00208,
-    'r': 0.06624,
-    's': 0.10532,
-    't': 0.0541,
-    'u': 0.03793,
-    'v': 0.01113,
-    'w': 0.01762,
-    'x': 0.00464,
-    'y': 0.03074,
-    'z': 0.00477
+    'a': 0.07852, 'b': 0.02495, 'c': 0.03281, 'd': 0.04359, 'e': 0.10704, 'f': 0.01983,
+    'g': 0.02473, 'h': 0.02681, 'i': 0.05582, 'j': 0.00362, 'k': 0.02168, 'l': 0.0541,
+    'm': 0.02932, 'n': 0.04544, 'o': 0.06474, 'p': 0.03246, 'q': 0.00208, 'r': 0.06624,
+    's': 0.10532, 't': 0.0541, 'u': 0.03793, 'v': 0.01113, 'w': 0.01762, 'x': 0.00464,
+    'y': 0.03074, 'z': 0.00477
+}
+
+# This is a set of words that end in "-es" but are still valid words.
+VALID_FAUX_PLURAL_WORDS = {
+    "apres", "bakes", "bares", "bases", "bides", "blues", "bodes", "bores", "bowes",
+    "cares", "cedes", "cites", "comes", "copes", "cries", "dazes", "dices", "dines",
+    "dotes", "doxes", "dozes", "eases", "gives", "gores", "hades", "hates", "hazes",
+    "hones", "hypes", "idles", "lases", "loses", "makes", "maxes", "metes", "mixes",
+    "mopes", "mutes", "nixes", "ogles", "pales", "pares", "paves", "plies", "pokes",
+    "pries", "rares", "rases", "riles", "rises", "roves", "sates", "shies", "tames",
+    "tares", "tases", "vexes", "wades", "wakes", "wanes", "wises"
 }
 
 
@@ -534,9 +524,7 @@ def solve_wordle(
             reverse = True
         )[0]
 
-    if isinstance(target_word, str):
-        target_word = Word(target_word)
-
+    target_word = Word(target_word) if isinstance(target_word, str) else target_word
     num_guesses = 0
     masks = []
 
