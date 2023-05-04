@@ -3,7 +3,7 @@
 good guesses, based on the feedback received about previous guesses."""
 
 import textwrap  # Used to pretty-print long blocks of text so that they appear nicely
-from typing import Callable, Optional  # Used for type-checking throughout the script
+from typing import Callable, Optional, Self  # Used for type-checking throughout the script
 from tqdm import tqdm  # Used to display progress bars for long-running operations
 
 Position = int
@@ -95,7 +95,7 @@ class Word:
     def __repr__(self) -> str:
         return _universal_repr(self)
 
-    def __eq__(self, other: "Word") -> bool:
+    def __eq__(self, other: Self) -> bool:
         return self.full_word == other.full_word
 
     def __getitem__(self, position: int) -> Letter:
@@ -120,7 +120,7 @@ class Word:
 
         return round(sum(frequency_dict[letter] for letter in self.letters) * 100, 3)
 
-    def calculate_guess_results(self, guessed_word: "Word") -> str:
+    def calculate_guess_results(self, guessed_word: Self) -> str:
         """This takes in a guessed word and returns the Wordle results string.
         In other words, this pretends that this Word is being used as the target
         word in a Wordle game, and the guessed word is an attempt to solve the Wordle.
@@ -215,14 +215,14 @@ class Mask:
     def __repr__(self) -> str:
         return _universal_repr(self)
 
-    def __eq__(self, other: "Mask") -> bool:
+    def __eq__(self, other: Self) -> bool:
         return all([
             self.correct_positions == other.correct_positions,
             self.incorrect_positions == other.incorrect_positions,
             self.incorrect_globals == other.incorrect_globals,
         ])
 
-    def __add__(self, other: "Mask") -> "Mask":
+    def __add__(self, other: Self) -> Self:
         """This combines two Masks together to yield a new Mask
         that incorporates the information from both."""
 
@@ -271,7 +271,7 @@ class Mask:
             max_occurrences = self.max_occurrences | other.max_occurrences,
         )
 
-    def __radd__(self, other: "Mask") -> "Mask":
+    def __radd__(self, other: Self) -> Self:
         return self.__add__(other)
 
     @classmethod
@@ -352,7 +352,7 @@ class Mask:
             max_occurrences = max_occurrences,
         )
 
-    def info_guess_version(self) -> "Mask":
+    def info_guess_version(self) -> Self:
         """An "informational guess version" of a Mask assumes that it's being used
         not to try to solve the Wordle, but to get as much information as possible,
         for use in an upcoming guess.
