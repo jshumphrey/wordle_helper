@@ -3,7 +3,7 @@
 good guesses, based on the feedback received about previous guesses."""
 
 import textwrap  # Used to pretty-print long blocks of text so that they appear nicely
-from typing import Callable, Optional, Self  # Used for type-checking throughout the script
+from typing import Callable, Iterator, Sequence, Optional, Self  # Used for type-checking throughout the script
 from tqdm import tqdm  # Used to display progress bars for long-running operations
 
 Position = int
@@ -154,10 +154,43 @@ class Word:
         return results
 
 
+class WordList:
+    """A WordList represents a list of Words, and provides a number of functions
+    to assist in working with groups of Words (rather than individually).
+
+    Note that WordLists are named WordLISTS for a reason (as opposed to WordSets):
+    they are ordered collections, and x in WordList is O(n)."""
+
+    _words: list[Word]
+
+    def __init__(self, words: Sequence[Word | str]) -> None:
+        self._words = [Word(w) if isinstance(w, str) else w for w in words]
+
+    def __str__(self) -> str:
+        return str(self._words)
+
+    def __repr__(self) -> str:
+        return f"<WordList: words: {str(self)}>"
+
+    def __eq__(self, other: Self) -> bool:
+        return self._words == other._words
+
+    def __contains__(self, word: Word) -> bool:
+        return word in self._words
+
+    def __iter__(self) -> Iterator[Word]:
+        return (w for w in self._words)
+
+    def __add__(self, other: Self) -> Self:
+        """Using dict.fromkeys preserves the insert order of the combined list,
+        while removing duplicates."""
+        return WordList(list(dict.fromkeys(self._words + other._words)))
+
+    def __radd__(self, other: Self) -> Self:
+        return other.__add__(self)
+
 class Mask:
-    """A Mask represents a set of filtering criteria that gets applied
-    to a set of Words.
-    """
+    """A Mask represents a set of filtering criteria that gets applied to a WordList."""
 
     correct_positions: dict[Position, Letter]  # Greens; Letters that must appear in a certain position
     incorrect_positions: dict[Position, set[Letter]]  # Yellows; Letters that must NOT appear in a certain position
