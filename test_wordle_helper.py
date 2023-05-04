@@ -70,6 +70,13 @@ class TestMask(unittest.TestCase):
         test_mask_1 = wordle.Mask.from_wordle_results("arose", "gbgbb")
         self.assertTrue(test_mask_1.is_word_accepted("adobo"))
 
+        test_mask_2 = (
+            wordle.Mask.from_wordle_results("slate", "bbbbb")
+            + wordle.Mask.from_wordle_results("crony", "bbbbg")
+            + wordle.Mask.from_wordle_results("dumpy", "bgbgg")
+        )
+        self.assertTrue(test_mask_2.is_word_accepted("puppy"))
+
     def test_from_wordle_results(self):
         """Test that Mask.from_wordle_results correctly creates a Mask with the given inputs."""
         self.assertEqual(
