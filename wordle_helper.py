@@ -35,27 +35,6 @@ VALID_FAUX_PLURAL_WORDS = {
     "tares", "tases", "vexes", "wades", "wakes", "wanes", "wises"
 }
 
-
-def _universal_repr(input_object) -> str:
-    """A simple implementation of __repr__ that can be used for any type of object."""
-    try:
-        object_class = input_object.__class__
-        object_module = object_class.__module__
-        if object_module != "builtins":
-            object_fq_class = f"{object_module}.{object_class.__qualname__}"
-        else:
-            object_fq_class = object_class.__qualname__
-        object_item_names = [
-            f"{str(key)}: {str(value)}"
-            for key, value in input_object.__dict__.items()
-        ]
-
-        return f"<{object_fq_class}: {', '.join(object_item_names)}>"
-
-    except AttributeError:
-        return repr(input_object)
-
-
 class Word:
     """A Word represents a single valid Wordle word.
     Words also define a number of data structures to make comparison faster."""
@@ -84,7 +63,12 @@ class Word:
         return self.full_word
 
     def __repr__(self) -> str:
-        return _universal_repr(self)
+        return (
+            f"<wordle_helper.Word at {hex(id(self))}: "
+            f"full_word: {self.full_word}"
+            f", score: {self.score}"
+            f">"
+        )
 
     def __eq__(self, other: Self) -> bool:
         return self.full_word == other.full_word
@@ -176,10 +160,15 @@ class WordList:
         self.letter_frequency = self.calculate_letter_frequency()
 
     def __str__(self) -> str:
-        return str(self._words)
+        return f"WordList containing {len(self)} words"
 
     def __repr__(self) -> str:
-        return f"<WordList: words: {str(self)}>"
+        return (
+            f"<wordle_helper.WordList at {hex(id(self))}: "
+            f"_words: {[str(w) for w in self._words]}"
+            f", letter_frequency: {self.letter_frequency}"
+            f">"
+        )
 
     def __bool__(self) -> bool:
         return self._words != []
@@ -360,7 +349,14 @@ class Mask:
         )
 
     def __repr__(self) -> str:
-        return _universal_repr(self)
+        return (
+            f"<wordle_helper.Mask at {hex(id(self))}: "
+            f"correct_positions: {self.correct_positions}"
+            f", incorrect_positions: {self.incorrect_positions}"
+            f", incorrect_globals: {self.incorrect_globals}"
+            f", max_occurrences: {self.max_occurrences}"
+            f">"
+        )
 
     def __eq__(self, other: Self) -> bool:
         return all([
