@@ -4,7 +4,7 @@ good guesses, based on the feedback received about previous guesses."""
 
 import textwrap  # Used to pretty-print long blocks of text so that they appear nicely
 import typing  # Used for type-checking throughout the script
-from typing import Callable, Iterator, Sequence, Optional, Self
+from typing import Any, Callable, Iterator, Sequence, Optional, Self
 from tqdm import tqdm  # Used to display progress bars for long-running operations
 
 Position = int
@@ -163,9 +163,17 @@ class WordList:
     they are ordered collections, and x in WordList is O(n)."""
 
     _words: list[Word]
+    letter_frequency: dict[Letter, float]
 
     def __init__(self, words: Sequence[Word | str]) -> None:
         self._words = [Word(w) if isinstance(w, str) else w for w in words]
+
+        # It might seem weird to go ahead and calculate the letter frequency
+        # for all new WordLists, but in practice, this gets used a _ton_,
+        # and it's honestly better to just calculate it at the beginning and
+        # cache it for later. Sooner or later, we're _going_ to need it,
+        # and calculating it is O(self._words), so should just do it once.
+        self.letter_frequency = self.calculate_letter_frequency()
 
     def __str__(self) -> str:
         return str(self._words)
@@ -228,19 +236,22 @@ class WordList:
 
     def sort(
         self,
-        sort_function: Optional[Callable[[Word], float]] = None,
-        reverse: bool = True,
-    ) -> Self:
-        """This sorts a list of Words according to their score, or a provided callable."""
+        sort_function: Callable[[Word], Any],
+        reverse: bool = False,
+    ) -> None:
+        """This sorts self._words according to the provided callable."""
+        self._words.sort(key = sort_function, reverse = reverse)
 
-        def default_sort_function(word: Word) -> float:
-            return word.score
+    def frequency_sort(self) -> None:
+        """This is a common special case for sorting a WordList, where we want to sort
+        the WordList by the scores of its Words, where those scores are calculated
+        based on this WordList's letter-frequency distribution, and in descending
+        order of those scores (i.e. highest scores first)."""
 
-        return WordList(sorted(
-            self,
-            key = sort_function or default_sort_function, # type: ignore
-            reverse = reverse,
-        ))
+        self.sort(
+            sort_function = lambda w: w.calculate_score(self.letter_frequency),
+            reverse = True
+        )
 
     def apply_masks(self, masks: list["Mask"]) -> Self:
         """This returns a WordList of all of the Words in this WordList
@@ -265,7 +276,10 @@ class WordList:
         but their percentage value might be zero if the letter did not appear in the list.
         The percentages are expressed as float values (i.e. 0.0535 = 5.35%)."""
 
-        total_num_letters = len(self) * 5  # We can cheat since we know all words have 5 letters
+        total_num_letters = len(self) * 5  # Shortcut since we know all words have 5 letters
+
+        # Instantiating letters this way guarantees that we have an entry for every letter,
+        # including letters that don't appear in any of this WordList's words
         letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
 
         for word in self:
@@ -279,17 +293,20 @@ class WordList:
 
     def pprint(self, num_words: int = MAX_PRINT_RESULTS) -> None:
         """This pretty-prints a list of Words for display to the console.
-        The Words will be printed in the order they appear in `words`, so if they need
-        to be sorted before printing them, you'll need to do that beforehand.
-        Only a certain number of them are displayed."""
+        The Words will be printed in the order they appear in `self._words`,
+        so if they need to be sorted before printing them, you'll need to
+        do that beforehand. Only a certain number of them are displayed."""
 
         print()
-        print(f"Found {len(self)} total words.")
-        print(f"Here are the top {num_words} of them.")
-        print("\t".join(["Word", "Score"]))
-        print("\t".join(["-----", "------"]))
+        print(f"Found {len(self)} total words; here are the top {num_words} of them.")
+        print("  ".join(["Word ", "Score (These Words)", "Score (All Words)"]))
+        print("  ".join(["-----", "-------------------", "-----------------"]))
         for word in self[:num_words]:
-            print("\t".join([word.full_word, str(word.score)]))
+            print("  ".join([
+                word.full_word,
+                str(word.calculate_score(self.letter_frequency)).ljust(19, " "),
+                str(word.score),
+            ]))
         print()
 
 
@@ -537,6 +554,7 @@ class Mask:
             if word.letter_counts[letter] > max_occurrences:
                 return False
 
+        # If none of the rejection criteria apply, accept the word by returning True.
         return True
 
     def filter_words(self, words: WordList) -> WordList:
@@ -546,12 +564,7 @@ class Mask:
 
 def print_help() -> None:
     """This prints out some instructional text on how to use the interactive prompt."""
-
-    wrapper = textwrap.TextWrapper(
-        fix_sentence_endings = True,
-        replace_whitespace = False,
-    )
-
+    wrapper = textwrap.TextWrapper(fix_sentence_endings = True, replace_whitespace = False)
     print()
     with open("README.md", "r", encoding = "utf-8") as infile:
         for line in infile.readlines():
@@ -582,17 +595,18 @@ def solve_wordle(
         We want to sort by the score of each word, recalculated with
         the word list provided, and we want only the single best word."""
 
-        letter_frequency = words.calculate_letter_frequency()
-        return words.sort(
-            sort_function = lambda w: w.calculate_score(letter_frequency),
-            reverse = True
-        )[0]
+        words.frequency_sort()
+        return words[0]
 
     target_word = Word(target_word) if isinstance(target_word, str) else target_word
     num_guesses = 0
     masks = []
 
-    guess_word = starting_word if starting_word else all_words.sort()[0]
+    if starting_word:
+        guess_word = starting_word
+    else:
+        all_words.frequency_sort()
+        guess_word = all_words[0]
 
     while True:
         num_guesses += 1
@@ -721,12 +735,8 @@ def interactive_prompt() -> None:
                         print("No result words found! Make sure you entered everything correctly.")
 
                 else:
-                    letter_frequency = result_words.calculate_letter_frequency()
-                    sorted_words = result_words.sort(
-                        sort_function = lambda w: w.calculate_score(letter_frequency),
-                        reverse = True
-                    )
-                    sorted_words.pprint()
+                    result_words.frequency_sort()
+                    result_words.pprint()
 
             # Allow the user to tell the script to try to automatically solve Wordles.
             case ["autosolve", "all"]:

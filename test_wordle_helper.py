@@ -51,6 +51,22 @@ class TestWordList(unittest.TestCase):
         except Exception as ex:
             raise AssertionError from ex
 
+    def test_sort(self):
+        """Test that WordList.sort correctly sorts the WordList's words."""
+        test_wl = wordle.WordList.from_file("test_words_file.txt")
+        self.assertEqual(list(w.full_word for w in test_wl), ["abcde", "fghij", "klmno"])
+
+        # When sorting by score, the order of the test words is "abcde" > "klmno" > "fghij"
+        test_wl.sort(
+            sort_function = lambda w: w.calculate_score(wordle.GLOBAL_LETTER_FREQUENCIES),
+            reverse = True
+        )
+        self.assertEqual(list(w.full_word for w in test_wl), ["abcde", "klmno", "fghij"])
+
+        # Test sorting it back into alphabetical order.
+        test_wl.sort(sort_function = lambda w: w.full_word, reverse = False)
+        self.assertEqual(list(w.full_word for w in test_wl), ["abcde", "fghij", "klmno"])
+
 
 class TestMask(unittest.TestCase):
     """Tests elements of the Mask class."""
