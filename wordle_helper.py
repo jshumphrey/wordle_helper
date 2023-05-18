@@ -3,7 +3,8 @@
 good guesses, based on the feedback received about previous guesses."""
 
 import textwrap  # Used to pretty-print long blocks of text so that they appear nicely
-from typing import Callable, Iterator, Sequence, Optional, Self  # Used for type-checking throughout the script
+import typing  # Used for type-checking throughout the script
+from typing import Callable, Iterator, Sequence, Optional, Self
 from tqdm import tqdm  # Used to display progress bars for long-running operations
 
 Position = int
@@ -178,8 +179,11 @@ class WordList:
     def __contains__(self, word: Word) -> bool:
         return word in self._words
 
+    def __len__(self) -> int:
+        return len(self._words)
+
     def __iter__(self) -> Iterator[Word]:
-        return (w for w in self._words)
+        yield from self._words
 
     def __add__(self, other: Self) -> Self:
         """Using dict.fromkeys preserves the insert order of the combined list,
@@ -188,6 +192,99 @@ class WordList:
 
     def __radd__(self, other: Self) -> Self:
         return other.__add__(self)
+
+    @typing.overload
+    def __getitem__(self, key: slice) -> Self:
+        pass
+
+    @typing.overload
+    def __getitem__(self, key: int) -> Word:
+        pass
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return WordList(self._words[key])
+
+        if isinstance(key, int):
+            return self._words[key]
+
+        raise TypeError(
+            "WordList.__getitem__ expects keys that are integers or slices, "
+            f"but got {type(key)} instead!"
+        )
+
+    @classmethod
+    def from_file(cls, filename: str) -> Self:
+        """This sets up a WordList by reading Words from a text file."""
+        with open(filename, "r", encoding = "utf-8") as infile:
+            return cls(infile.readlines())
+
+    def sort(
+        self,
+        sort_function: Optional[Callable[[Word], float]] = None,
+        reverse: bool = True,
+    ) -> Self:
+        """This sorts a list of Words according to their score, or a provided callable."""
+
+        def default_sort_function(word: Word) -> float:
+            return word.score
+
+        return WordList(sorted(
+            self,
+            key = sort_function or default_sort_function, # type: ignore
+            reverse = reverse,
+        ))
+
+    def apply_masks(self, masks: list["Mask"]) -> Self:
+        """This returns a WordList of all of the Words in this WordList
+        that meet ALL of the filtering criteria in the provided Masks."""
+
+        # Trivial cases: 0 or 1 masks
+        if not masks:
+            return self
+        if len(masks) == 1:
+            return masks[0].filter_words(self)
+
+        # If we have multiple masks, add them all together before filtering ONCE
+        total_mask = masks[0]
+        for mask in masks[1:]:
+            total_mask += mask
+        return total_mask.filter_words(self)
+
+    def calculate_letter_frequency(self) -> dict[Letter, float]:
+        """This runs a frequency analysis on all of the letters in the provided word list.
+        It returns a dict that maps each letter to a percentage of that letter's
+        representation across the entire word list. All letters are included in the dict,
+        but their percentage value might be zero if the letter did not appear in the list.
+        The percentages are expressed as float values (i.e. 0.0535 = 5.35%)."""
+
+        total_num_letters = len(self) * 5  # We can cheat since we know all words have 5 letters
+        letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
+
+        for word in self:
+            for letter in word.full_word:
+                letters[letter] += 1
+
+        return {
+            letter: round(count / total_num_letters, 5)
+            for letter, count in letters.items()
+        }
+
+    def pprint(self, num_words: int = MAX_PRINT_RESULTS) -> None:
+        """This pretty-prints a list of Words for display to the console.
+        The Words will be printed in the order they appear in `words`, so if they need
+        to be sorted before printing them, you'll need to do that beforehand.
+        Only a certain number of them are displayed."""
+
+        print()
+        print(f"Found {len(self)} total words.")
+        print(f"Here are the top {num_words} of them.")
+        print("\t".join(["Word", "Score"]))
+        print("\t".join(["-----", "------"]))
+        for word in self[:num_words]:
+            print("\t".join([word.full_word, str(word.score)]))
+        print()
+
 
 class Mask:
     """A Mask represents a set of filtering criteria that gets applied to a WordList."""
@@ -435,80 +532,9 @@ class Mask:
 
         return True
 
-    def filter_words(self, words: list[Word]) -> list[Word]:
+    def filter_words(self, words: WordList) -> WordList:
         """This applies this Mask to an entire sequence of input Words."""
-        return [word for word in words if self.is_word_accepted(word)]
-
-
-def load_words(word_list_filename: str) -> list[Word]:
-    """This reads in the list of five-letter words from the input text file,
-    and returns a set of Word objects; one for each word in the file."""
-    with open(word_list_filename, "r", encoding = "utf-8") as infile:
-        return [Word(line.strip()) for line in infile.readlines()]
-
-
-def apply_masks(words: list[Word], masks: list[Mask]) -> list[Word]:
-    """This applies an arbitrary number of Masks to an input list of Words."""
-    if masks == []:
-        return words
-    if len(masks) == 1:
-        return masks[0].filter_words(words)
-
-    # We have multiple masks; add them all together before filtering
-    total_mask = masks[0]
-    for mask in masks[1:]:
-        total_mask += mask
-    return total_mask.filter_words(words)
-
-
-def sort_words(
-        words: list[Word],
-        sort_function: Optional[Callable[[Word], float]] = None,
-        reverse: bool = True,
-    ) -> list[Word]:
-    """This sorts a list of Words according to their score, or a provided callable."""
-
-    return sorted(
-        words,
-        key = lambda w: sort_function(w) if sort_function else w.score,
-        reverse = reverse,
-    )
-
-
-def pprint_words(words: list[Word], num_words: int = MAX_PRINT_RESULTS) -> None:
-    """This pretty-prints a list of Words for display to the console.
-    The Words will be printed in the order they appear in `words`, so if they need
-    to be sorted before printing them, you'll need to do that beforehand.
-    Only a certain number of them are displayed."""
-
-    print()
-    print(f"Found {len(words)} total words.")
-    print(f"Here are the top {num_words} of them.")
-    print("\t".join(["Word", "Score"]))
-    print("\t".join(["-----", "------"]))
-    for word in words[:num_words]:
-        print("\t".join([word.full_word, str(word.score)]))
-    print()
-
-
-def calculate_letter_frequency(words: list[Word]) -> dict[Letter, float]:
-    """This runs a frequency analysis on all of the letters in the provided word list.
-    It returns a dict that maps each letter to a percentage of that letter's
-    representation across the entire word list. All letters are included in the dict,
-    but their percentage value might be zero if the letter did not appear in the list.
-    The percentages are expressed as float values (i.e. 0.0535 = 5.35%)."""
-
-    total_num_letters = len(words) * 5  # We can cheat since we know all words have 5 letters
-    letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
-
-    for word in words:
-        for letter in word.full_word:
-            letters[letter] += 1
-
-    return {
-        letter: round(count / total_num_letters, 5)
-        for letter, count in letters.items()
-    }
+        return WordList([word for word in words if self.is_word_accepted(word)])
 
 
 def print_help() -> None:
@@ -528,7 +554,7 @@ def print_help() -> None:
 
 def solve_wordle(
     target_word: Word | str,
-    all_words: list[Word],
+    all_words: WordList,
     starting_word: Optional[Word] = None,
     print_output: bool = False,
 ) -> int:
@@ -544,14 +570,13 @@ def solve_wordle(
     If desired, an alternative initial guess can be provided with the
     `starting_word` parameter."""
 
-    def calculate_best_word(words: list[Word]) -> Word:
+    def calculate_best_word(words: WordList) -> Word:
         """This function encapsulates a special case of using sort_words.
         We want to sort by the score of each word, recalculated with
         the word list provided, and we want only the single best word."""
 
-        letter_frequency = calculate_letter_frequency(words)
-        return sort_words(
-            words,
+        letter_frequency = words.calculate_letter_frequency()
+        return words.sort(
             sort_function = lambda w: w.calculate_score(letter_frequency),
             reverse = True
         )[0]
@@ -560,7 +585,7 @@ def solve_wordle(
     num_guesses = 0
     masks = []
 
-    guess_word = starting_word if starting_word else sort_words(all_words)[0]
+    guess_word = starting_word if starting_word else all_words.sort()[0]
 
     while True:
         num_guesses += 1
@@ -575,8 +600,8 @@ def solve_wordle(
         guess_results = target_word.calculate_guess_results(guess_word)
         masks.append(Mask.from_wordle_results(guess_word.full_word, guess_results))
 
-        info_words = apply_masks(all_words, [m.info_guess_version() for m in masks])
-        solve_words = apply_masks(all_words, masks)
+        info_words = all_words.apply_masks([m.info_guess_version() for m in masks])
+        solve_words = all_words.apply_masks(masks)
         if print_output:
             print(
                 f"Guess #{num_guesses}: Guessed '{guess_word}' and got '{guess_results}'; "
@@ -597,7 +622,7 @@ def solve_wordle(
             guess_word = calculate_best_word(solve_words)
 
 
-def solve_all_wordles(words: list[Word]) -> None:
+def solve_all_wordles(words: WordList) -> None:
     """This attempts to solve all possible Wordles, based on the script's
     suggested words. At the end, statistics are printed about the numbers of
     guesses it took to solve each word."""
@@ -637,7 +662,7 @@ def solve_all_wordles(words: list[Word]) -> None:
 def interactive_prompt() -> None:
     """This provides an interactive prompt that helps to make use of this script."""
 
-    words: list[Word] = load_words(WORDS_FILENAME)
+    words: WordList = WordList.from_file(WORDS_FILENAME)
     masks: list[Mask] = []
 
     while True:
@@ -656,7 +681,7 @@ def interactive_prompt() -> None:
 
             # Reload the word list from the file, in case it's been changed during runtime.
             case ["reload"]:
-                words = load_words(WORDS_FILENAME)
+                words = WordList.from_file(WORDS_FILENAME)
                 print("Word list reloaded from file.")
 
             # Allow the user to view and/or clear the list of current Masks.
@@ -681,7 +706,7 @@ def interactive_prompt() -> None:
                 else:
                     suggest_masks = masks
 
-                result_words = apply_masks(words, suggest_masks)
+                result_words = words.apply_masks(suggest_masks)
                 if result_words == []:
                     if suggest_type == "info":
                         print("No result words found! You might want to try 'suggest solve' instead.")
@@ -689,13 +714,12 @@ def interactive_prompt() -> None:
                         print("No result words found! Make sure you entered everything correctly.")
 
                 else:
-                    letter_frequency = calculate_letter_frequency(result_words)
-                    sorted_words = sort_words(
-                        result_words,
+                    letter_frequency = result_words.calculate_letter_frequency()
+                    sorted_words = result_words.sort(
                         sort_function = lambda w: w.calculate_score(letter_frequency),
                         reverse = True
                     )
-                    pprint_words(sorted_words)
+                    sorted_words.pprint()
 
             # Allow the user to tell the script to try to automatically solve Wordles.
             case ["autosolve", "all"]:
