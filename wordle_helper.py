@@ -185,7 +185,7 @@ class WordList:
         return self._words != []
 
     def __eq__(self, other: Self) -> bool:
-        return self._words == other._words
+        return set(self) == set(other)
 
     def __contains__(self, word: Word) -> bool:
         return word in self._words
@@ -630,7 +630,7 @@ def solve_wordle(
             )
 
         # Check to make sure we're not in an "impossible situation"; raise if so.
-        if solve_words == [] or (len(solve_words) == 1 and solve_words != [target_word]):
+        if not solve_words or (len(solve_words) == 1 and solve_words != [target_word]):
             raise RuntimeError(
                 f"Stuck in impossible situation when trying to solve the word '{target_word}'! "
                 f"Current masks: {[str(m) for m in masks]}; "
