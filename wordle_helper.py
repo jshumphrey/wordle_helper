@@ -173,6 +173,9 @@ class WordList:
     def __repr__(self) -> str:
         return f"<WordList: words: {str(self)}>"
 
+    def __bool__(self) -> bool:
+        return self._words != []
+
     def __eq__(self, other: Self) -> bool:
         return self._words == other._words
 
@@ -711,7 +714,7 @@ def interactive_prompt() -> None:
                     suggest_masks = masks
 
                 result_words = words.apply_masks(suggest_masks)
-                if result_words == []:
+                if not result_words:
                     if suggest_type == "info":
                         print("No result words found! You might want to try 'suggest solve' instead.")
                     else:
