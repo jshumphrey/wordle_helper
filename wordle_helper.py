@@ -219,6 +219,10 @@ class WordList:
         with open(filename, "r", encoding = "utf-8") as infile:
             return cls([line.strip() for line in infile.readlines() if line])
 
+    def copy(self) -> Self:
+        """This returns a deep copy of this WordList."""
+        return WordList(self._words[:])
+
     def sort(
         self,
         sort_function: Callable[[Word], Any],
@@ -595,11 +599,8 @@ def solve_wordle(
     num_guesses = 0
     masks = []
 
-    if starting_word:
-        guess_word = starting_word
-    else:
-        all_words.frequency_sort()
-        guess_word = all_words[0]
+    possible_words = all_words.copy() # Need to be careful not to modify all_words
+    guess_word = starting_word if starting_word else possible_words.calculate_best_freqsort_word()
 
     while True:
         num_guesses += 1
@@ -614,26 +615,26 @@ def solve_wordle(
         guess_results = target_word.calculate_guess_results(guess_word)
         masks.append(Mask.from_wordle_results(guess_word.full_word, guess_results))
 
-        info_words = all_words.apply_masks([m.info_guess_version() for m in masks])
-        solve_words = all_words.apply_masks(masks)
+        possible_words = possible_words.apply_masks(masks)
+        info_words = possible_words.apply_masks([m.info_guess_version() for m in masks])
         if print_output:
             print(
                 f"Guess #{num_guesses}: Guessed '{guess_word}' and got '{guess_results}'; "
-                f"{len(solve_words)} words left"
+                f"{len(possible_words)} possible words left"
             )
 
         # Check to make sure we're not in an "impossible situation"; raise if so.
-        if not solve_words or (len(solve_words) == 1 and solve_words != [target_word]):
+        if not possible_words or (len(possible_words) == 1 and possible_words != [target_word]):
             raise RuntimeError(
                 f"Stuck in impossible situation when trying to solve the word '{target_word}'! "
                 f"Current masks: {[str(m) for m in masks]}; "
-                f"current possible words: {[str(w) for w in solve_words]}"
+                f"current possible words: {[str(w) for w in possible_words]}"
             )
 
-        if len(solve_words) >= 20 and len(info_words) >= 10:
+        if len(possible_words) >= 20 and len(info_words) >= 10:
             guess_word = info_words.calculate_best_freqsort_word()
         else:
-            guess_word = solve_words.calculate_best_freqsort_word()
+            guess_word = possible_words.calculate_best_freqsort_word()
 
 
 def solve_all_wordles(words: WordList) -> None:
@@ -643,8 +644,14 @@ def solve_all_wordles(words: WordList) -> None:
 
     results: dict[Word, int] = {}  # Stores the number of guesses it took to solve the Word
 
+    # Precalculate the starting word to avoid having to redo it for each target word.
+    starting_word = words.calculate_best_freqsort_word()
     for word in tqdm(words, desc = "Playing all Wordles"):
-        results[word] = solve_wordle(target_word = word, all_words = words)
+        results[word] = solve_wordle(
+            target_word = word,
+            all_words = words,
+            starting_word = starting_word
+        )
 
     solve_counts = {n: 0 for n in range(1, 8)}
     max_guesses = 0
