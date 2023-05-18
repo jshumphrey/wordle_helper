@@ -38,6 +38,20 @@ class TestWord(unittest.TestCase):
         self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("teens")), "gggbb")
         self.assertEqual(test_word_1.calculate_guess_results(wordle.Word("epees")), "ybgbb")
 
+
+class TestWordList(unittest.TestCase):
+    """Tests elements of the WordList class."""
+
+    def test_from_file(self):
+        """Make sure that WordList.from_file can successfully read in a file of test words."""
+        try:
+            test_wl = wordle.WordList.from_file("test_words_file.txt")
+            self.assertEqual(list(w.full_word for w in test_wl), ["abcde", "fghij", "klmno"])
+
+        except Exception as ex:
+            raise AssertionError from ex
+
+
 class TestMask(unittest.TestCase):
     """Tests elements of the Mask class."""
 
