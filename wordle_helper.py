@@ -646,32 +646,35 @@ def solve_all_wordles(words: WordList) -> None:
 
     # Precalculate the starting word to avoid having to redo it for each target word.
     starting_word = words.calculate_best_freqsort_word()
-    for word in tqdm(words, desc = "Playing all Wordles"):
+    for word in tqdm(words, desc = "Solving all Wordles"):
         results[word] = solve_wordle(
             target_word = word,
             all_words = words,
             starting_word = starting_word
         )
 
-    solve_counts = {n: 0 for n in range(1, 8)}
-    max_guesses = 0
+    max_guesses = max(results.values())
     max_guess_words = []
+    solve_counts = {n: 0 for n in range(1, max_guesses + 1)}
 
     for word, guesses in results.items():
-        if guesses > max_guesses:
-            max_guesses = guesses
-            max_guess_words = [word]
-        elif guesses == max_guesses:
+        if guesses == max_guesses:
             max_guess_words.append(word)
-        solve_counts[min(guesses, 7)] += 1
+        solve_counts[guesses] += 1
 
     print()
     print("Successfully solved all Wordles.")
-    for n in range(1, 8):  # pylint: disable = invalid-name
-        percent = round((solve_counts[n] / len(words)) * 100, 2)
-        pprint_n = str(n) if n < 7 else "more than 6"
-        print(f"Words solved in {pprint_n} guesses: {solve_counts[n]} ({percent}%)")
+    for i in range(1, max_guesses + 1):
+        percent = round((solve_counts[i] / len(words)) * 100, 2)
+        print(f"Words solved in {i} guesses: {solve_counts[i]} ({percent}%)")
+
+    fail_count = sum(count for guesses, count in solve_counts.items() if guesses > 6)
+    fail_percent = round((fail_count / len(words)) * 100, 2)
+    print(f"Words solved in more than 6 guesses (failures): {fail_count} ({fail_percent}%)")
     print()
+
+    average_guesses = round(sum(g * c for g, c in solve_counts.items()) / len(words), 2)
+    print(f"Average number of guesses to solve: {average_guesses}")
     print(f"Highest number of guesses to solve: {max_guesses}")
     print(
         f"Words that took {max_guesses} guesses to solve: "
