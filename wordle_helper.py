@@ -217,11 +217,7 @@ class WordList:
     def from_file(cls, filename: str) -> Self:
         """This sets up a WordList by reading Words from a text file."""
         with open(filename, "r", encoding = "utf-8") as infile:
-            return cls([
-                line.strip()
-                for line in infile.readlines()
-                if line
-            ])
+            return cls([line.strip() for line in infile.readlines() if line])
 
     def sort(
         self,
