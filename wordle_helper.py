@@ -238,6 +238,12 @@ class WordList:
             reverse = True
         )
 
+    def calculate_best_freqsort_word(self) -> Word:
+        """This encapsulates a common use-case for a WordList: getting the single Word
+        with the highest score according to this WordList's letter frequency."""
+        self.frequency_sort()
+        return self[0]
+
     def apply_masks(self, masks: list["Mask"]) -> Self:
         """This returns a WordList of all of the Words in this WordList
         that meet ALL of the filtering criteria in the provided Masks."""
@@ -585,14 +591,6 @@ def solve_wordle(
     If desired, an alternative initial guess can be provided with the
     `starting_word` parameter."""
 
-    def calculate_best_word(words: WordList) -> Word:
-        """This function encapsulates a special case of using sort_words.
-        We want to sort by the score of each word, recalculated with
-        the word list provided, and we want only the single best word."""
-
-        words.frequency_sort()
-        return words[0]
-
     target_word = Word(target_word) if isinstance(target_word, str) else target_word
     num_guesses = 0
     masks = []
@@ -633,9 +631,9 @@ def solve_wordle(
             )
 
         if len(solve_words) >= 20 and len(info_words) >= 10:
-            guess_word = calculate_best_word(info_words)
+            guess_word = info_words.calculate_best_freqsort_word()
         else:
-            guess_word = calculate_best_word(solve_words)
+            guess_word = solve_words.calculate_best_freqsort_word()
 
 
 def solve_all_wordles(words: WordList) -> None:
