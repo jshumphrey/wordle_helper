@@ -17,11 +17,11 @@ MAX_PRINT_RESULTS = 15  # The default number of words to print out in the sugges
 # and because it's the frequencies for the entire word list (i.e. it's expensive).
 # Frequency plots for smaller lists can be calculated at runtime as needed.
 GLOBAL_LETTER_FREQUENCIES = {
-    'a': 0.07852, 'b': 0.02495, 'c': 0.03281, 'd': 0.04359, 'e': 0.10704, 'f': 0.01983,
-    'g': 0.02473, 'h': 0.02681, 'i': 0.05582, 'j': 0.00362, 'k': 0.02168, 'l': 0.05410,
-    'm': 0.02932, 'n': 0.04544, 'o': 0.06474, 'p': 0.03246, 'q': 0.00208, 'r': 0.06624,
-    's': 0.10532, 't': 0.05410, 'u': 0.03793, 'v': 0.01113, 'w': 0.01762, 'x': 0.00464,
-    'y': 0.03074, 'z': 0.00477,
+    'a': 0.07927, 'b': 0.02503, 'c': 0.03363, 'd': 0.04408, 'e': 0.10927, 'f': 0.01983,
+    'g': 0.02434, 'h': 0.02705, 'i': 0.05654, 'j': 0.00340, 'k': 0.02093, 'l': 0.05457,
+    'm': 0.02880, 'n': 0.04527, 'o': 0.06496, 'p': 0.03170, 'q': 0.00212, 'r': 0.06777,
+    's': 0.10738, 't': 0.05466, 'u': 0.03754, 'v': 0.01132, 'w': 0.01771, 'x': 0.00474,
+    'y': 0.02360, 'z': 0.00446,
 }
 
 # This is a set of words that end in "-es" but are still valid words.
