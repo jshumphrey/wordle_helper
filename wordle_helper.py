@@ -282,6 +282,9 @@ class WordList:
         # including letters that don't appear in any of this WordList's words
         letters = {chr(letter_int): 0 for letter_int in range(ord("a"), ord("z") + 1)}
 
+        if not self._words:
+            return {letter: 0.0 for letter in letters.keys()}
+
         for word in self:
             for letter in word.full_word:
                 letters[letter] += 1
